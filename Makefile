@@ -1,7 +1,8 @@
 .DEFAULT_GOAL := default
 
-THRIFT_OUT := src/generated
-THRIFT_SRC := idls/meta.thrift
+CORE := tchannel-core
+THRIFT_OUT := $(CORE)/src/gen
+THRIFT_SRC := idls/idl/github.com/uber/tchannel/meta.thrift
 THRIFT_BIN := thrift
 
 default: clean build
@@ -9,10 +10,10 @@ default: clean build
 clean:
 	cargo clean;
 	# delete generated sources without mod.rs
-	find src/base | grep .rs | grep -v mod.rs | xargs rm;
+	find $(CORE)/src/gen | grep .rs | xargs rm;
 
 submodules:
-	git submodule update --init --recursive;
+	git submodule update --init;
 
 codegen: submodules
 	mkdir -p $(THRIFT_OUT);
