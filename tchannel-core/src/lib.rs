@@ -1,38 +1,95 @@
-pub mod tchannel {
-    use std::io;
+pub mod messages;
+pub mod connection;
+pub mod frame;
+pub mod codec;
 
-    fn newChannel(name: String) -> Result<Channel, io::Error> {
-        let peers = PeerList{};
-        let consectionOptions = ConnectionOptions{};
-        let createdStack = String::from("stack");
-        let channel = Channel{id: 1, createdStack, consectionOptions, peers};
+use messages::thrift::*;
+
+use connection::*;
+
+use tokio::net::TcpStream;
+
+pub type Error = Box<dyn std::error::Error + Send + Sync>;
+pub type Result<T> = std::result::Result<T, Error>;
+
+pub struct Channel {
+    id: u32,
+    connectionOptions: ConnectionOptions,
+    peers: PeerManager
+}
+
+impl Channel {
+    pub fn new(name: String) -> Result<Channel> {
+        let peers = PeerManager{};
+        let connectionOptions = ConnectionOptions{};
+        let channel = Channel{id: 1, connectionOptions, peers};
         Ok(channel)
     }
 
-    pub struct Channel {
-        id: u32,
-        createdStack: String,
-        consectionOptions: ConnectionOptions,
-        peers: PeerList
+    // Make subchannel for given service name.
+    pub fn makeSubchannel(&mut self, name: String) -> SubChannel {
+        SubChannel { service: String::from("my_service") }
+    }
+}
+
+pub struct SubChannel {
+    pub service: String
+}
+
+impl SubChannel {
+    // send thrift request return thrift response
+
+    pub fn register(&mut self) -> &mut SubChannel {
+        self
     }
 
-    pub struct ConnectionOptions {
-
+    pub fn send(&self, message: ThriftRequest, host: String, port: u16) -> Result<ThriftResponse> {
+        Ok(ThriftResponse {})
     }
+}
 
-    pub struct PeerList {
+pub struct ConnectionOptions {
+}
 
+use tokio::net::ToSocketAddrs;
+
+pub struct PeerManager {
+}
+
+impl PeerManager {
+    pub async fn connect<T: ToSocketAddrs>(addr: T) -> crate::Result<Connection> {
+        let socket = TcpStream::connect(addr).await?;
+        let connection = Connection::new(socket);
+        return Ok(connection);
     }
+}
 
-    pub struct Handler {
+// impl PeerManager {
+//     pub async fn connect<T: ToSocketAddrs>(addr: T) -> crate::Result<Client> {
+//         // The `addr` argument is passed directly to `TcpStream::connect`. This
+//         // performs any asynchronous DNS lookup and attempts to establish the TCP
+//         // connection. An error at either step returns an error, which is then
+//         // bubbled up to the caller of `mini_redis` connect.
+//         let socket = TcpStream::connect(addr).await?;
+//
+//         // Initialize the connection state. This allocates read/write buffers to
+//         // perform redis protocol frame parsing.
+//         let connection = Connection::new(socket);
+//
+//         Ok(Client { connection })
+//     }
+// }
 
-    }
+pub use connection::Connection;
 
-    pub enum ConnectionDirection {
-        None,
-        In,
-        Out
-    }
+
+pub struct Peer {
+}
+
+use messages::{Response, Request};
+
+pub trait RequestHandler<REQ: Request, RES: Response> {
+    fn handle(response: REQ) -> RES;
 }
 
 #[cfg(test)]

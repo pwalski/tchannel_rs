@@ -2,3 +2,4 @@ tchannel-example/server/target/
 tchannel-example/server/.idea/
 target/
 tchannel-core/src/gen
+.idea

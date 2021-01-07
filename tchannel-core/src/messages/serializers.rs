@@ -1,0 +1,3 @@
+trait Serializer {
+    fn decodeEndpoint();
+}
