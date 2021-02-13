@@ -9,7 +9,7 @@ use tokio::net::TcpStream;
 
 #[derive(Debug)]
 pub struct Connection {
-    stream: BufWriter<TcpStream>,
+    socket: BufWriter<TcpStream>,
     buffer: BytesMut,
 }
 
@@ -22,19 +22,12 @@ pub enum Direction {
 impl Connection {
     pub fn new(socket: TcpStream) -> Connection {
         Connection {
-            stream: BufWriter::new(socket),
+            socket: BufWriter::new(socket),
             buffer: BytesMut::with_capacity(4 * 1024),
         }
     }
 
     pub async fn write_iframe(&mut self, frame: &IFrame) -> io::Result<()> {
-
-        // match frame {
-        //     Frame::InitReq { id, version, headers } => {
-        //         println!("id {} version {}", id, version);
-        //         self.stream.write_i16(*id);
-        //     }
-        // } ???
 
         let mut buf = BytesMut::with_capacity(FRAME_HEADER_LENGTH as usize);
         buf.put_u16(frame.getSize() as u16 + FRAME_HEADER_LENGTH);
@@ -46,17 +39,26 @@ impl Connection {
         }
         let frame_payload = buf.chain(frame.getPayload().chunk());
 
-        self.stream.write_all(frame_payload.chunk());
 
-        self.stream.flush().await
+        println!("writing payload");
+        while frame_payload.has_remaining() {
+            println!("writing");
+            self.socket.write_all(frame_payload.chunk()).await;
+        }
+        println!("wrote bytes");
+
+        self.socket.flush().await
     }
 
     pub async fn read_frame(&mut self) -> crate::Result<Option<Frame>> {
         loop {
+            println!("Parsing frame");
             if let Some(frame) = self.parse_frame()? {
+                println!("Parsed frame");
                 return Ok(Some(frame));
             }
-            if 0 == self.stream.read_buf(&mut self.buffer).await? {
+            println!("Reading");
+            if 0 == self.socket.read_buf(&mut self.buffer).await? {
                 if self.buffer.is_empty() {
                     return Ok(None);
                 } else {
@@ -85,7 +87,7 @@ impl Connection {
     pub async fn write_frame(&mut self, frame: &Frame) -> io::Result<()> {
         match frame {
             Frame::Array(val) => {
-                self.stream.write_u8(b'*').await?;
+                self.socket.write_u8(b'*').await?;
                 self.write_decimal(val.len() as u64).await?;
                 for entry in &**val {
                     self.write_value(entry).await?;
@@ -93,7 +95,7 @@ impl Connection {
             }
             _ => self.write_value(frame).await?,
         }
-        self.stream.flush().await
+        self.socket.flush().await
     }
 
     async fn write_value(&mut self, frame: &Frame) -> io::Result<()> {
@@ -101,33 +103,33 @@ impl Connection {
             Frame::InitReq { id, version, headers} => {
                 println!("id {} version {}", id, version);
 
-                self.stream.write_i16(*id);
+                self.socket.write_i16(*id);
             }
 
 
             Frame::Simple(val) => {
-                self.stream.write_u8(b'+').await?;
-                self.stream.write_all(val.as_bytes()).await?;
-                self.stream.write_all(b"\r\n").await?;
+                self.socket.write_u8(b'+').await?;
+                self.socket.write_all(val.as_bytes()).await?;
+                self.socket.write_all(b"\r\n").await?;
             }
             Frame::Error(val) => {
-                self.stream.write_u8(b'-').await?;
-                self.stream.write_all(val.as_bytes()).await?;
-                self.stream.write_all(b"\r\n").await?;
+                self.socket.write_u8(b'-').await?;
+                self.socket.write_all(val.as_bytes()).await?;
+                self.socket.write_all(b"\r\n").await?;
             }
             Frame::Integer(val) => {
-                self.stream.write_u8(b':').await?;
+                self.socket.write_u8(b':').await?;
                 self.write_decimal(*val).await?;
             }
             Frame::Null => {
-                self.stream.write_all(b"$-1\r\n").await?;
+                self.socket.write_all(b"$-1\r\n").await?;
             }
             Frame::Bulk(val) => {
                 let len = val.len();
-                self.stream.write_u8(b'$').await?;
+                self.socket.write_u8(b'$').await?;
                 self.write_decimal(len as u64).await?;
-                self.stream.write_all(val).await?;
-                self.stream.write_all(b"\r\n").await?;
+                self.socket.write_all(val).await?;
+                self.socket.write_all(b"\r\n").await?;
             }
             Frame::Array(_val) => unreachable!(),
         }
@@ -141,8 +143,8 @@ impl Connection {
         let mut buf = Cursor::new(&mut buf[..]);
         write!(&mut buf, "{}", val)?;
         let pos = buf.position() as usize;
-        self.stream.write_all(&buf.get_ref()[..pos]).await?;
-        self.stream.write_all(b"\r\n").await?;
+        self.socket.write_all(&buf.get_ref()[..pos]).await?;
+        self.socket.write_all(b"\r\n").await?;
 
         Ok(())
     }

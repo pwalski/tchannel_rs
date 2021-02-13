@@ -83,7 +83,13 @@
                         <artifactId>exec-maven-plugin</artifactId>
                         <version>3.0.0</version>
                         <configuration>
-                            <mainClass>com.uber.tchannel.thrift.KeyValueServer</mainClass>
+                            <executable>java</executable>
+                            <arguments>
+                                <argument>-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:8000</argument>
+                                <argument>-classpath</argument>
+                                <classpath/>
+                                <argument>com.uber.tchannel.thrift.KeyValueServer</argument>
+                            </arguments>
                         </configuration>
                     </plugin>
                 </plugins>
@@ -98,7 +104,13 @@
                         <artifactId>exec-maven-plugin</artifactId>
                         <version>3.0.0</version>
                         <configuration>
-                            <mainClass>com.uber.tchannel.thrift.KeyValueClient</mainClass>
+                            <executable>java</executable>
+                            <arguments>
+                                <argument>-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:8001</argument>
+                                <argument>-classpath</argument>
+                                <classpath/>
+                                <argument>com.uber.tchannel.thrift.KeyValueClient</argument>
+                            </arguments>
                         </configuration>
                     </plugin>
                 </plugins>

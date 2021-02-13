@@ -20,16 +20,25 @@ pub async fn main() -> Result<()> {
     let initFrame = InitFrame::new(0, Type::InitRequest, headers);
 
     let mut connection = connect().await; // ???
-    connection.write_iframe(&initFrame);
+    println!("writing frame");
+    connection.write_iframe(&initFrame).await;
+    println!("wrote frame");
 
-    let request = ThriftRequest { value: String::from(""), transportHeaders: transportHeaders };
-    let response = subChannel.send(request, String::from("localhost"), 8888);
+    println!("reading frame");
+    connection.read_frame().await;
+    println!("got frame");
+
+    println!("reading frame");
+
+
+    // let request = ThriftRequest { value: String::from(""), transportHeaders: transportHeaders };
+    // let response = subChannel.send(request, String::from("localhost"), 8888);
 
     Ok(())
 }
 
 async fn connect() -> Connection {
-    let addr = String::from("127.0.0.1:8888");
+    let addr = String::from("192.168.50.172:8888");
     let socket = TcpStream::connect(addr).await.unwrap();
     return Connection::new(socket);
 }
