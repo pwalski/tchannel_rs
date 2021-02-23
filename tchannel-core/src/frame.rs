@@ -9,6 +9,10 @@ use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
 use std::iter::Map;
 
+use std::collections::HashMap;
+use std::mem::uninitialized;
+use std::fmt::Write;
+
 pub const FRAME_HEADER_LENGTH: u16 = 16;
 pub const ZERO: u8 = 0;
 
@@ -24,7 +28,7 @@ pub enum Frame {
     Array(Vec<Frame>),
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, FromPrimitive)]
 pub enum Type {
     // First message on every connection must be init
     InitRequest = 0x1,
@@ -60,6 +64,7 @@ pub enum Type {
     Error = 0xff
 }
 
+#[derive(Debug)]
 pub struct TFrame {
     pub id: u32,
     pub frame_type: Type,
@@ -73,12 +78,27 @@ pub trait IFrame {
     fn getSize(&self) -> usize;
 }
 
-use std::collections::HashMap;
-use std::mem::uninitialized;
-use std::fmt::Write;
+impl IFrame for TFrame {
+    fn getType(&self) -> Type {
+        self.frame_type
+    }
+
+    fn getId(&self) -> u32 {
+        self.id
+    }
+
+    fn getPayload(&self) -> &Bytes {
+        &self.payload
+    }
+
+    fn getSize(&self) -> usize {
+        self.payload.len()
+    }
+}
 
 pub struct InitFrame {
-    frame: TFrame
+    // pub because generics suc
+    pub frame: TFrame
 }
 
 impl InitFrame {

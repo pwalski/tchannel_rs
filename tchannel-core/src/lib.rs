@@ -1,7 +1,12 @@
+extern crate num;
+#[macro_use]
+extern crate num_derive;
+
 pub mod messages;
 pub mod connection;
 pub mod frame;
 pub mod codec;
+pub mod transport;
 
 use messages::thrift::*;
 
