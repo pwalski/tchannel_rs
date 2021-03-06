@@ -1,16 +1,14 @@
-pub mod thrift;
+use std::collections::HashMap;
+
+pub mod raw;
 pub mod serializers;
+pub mod thrift;
 
-pub trait Message {
+pub trait Message {}
 
-}
+pub trait Request {}
 
-pub trait Request {
-
-}
-
-pub trait Response {
-}
+pub trait Response {}
 
 pub mod headers {
     pub static ARG_SCHEME_KEY: &str = "as";
@@ -21,4 +19,11 @@ pub mod headers {
     pub static SPECULATIVE_EXECUTION_KEY: &str = "se";
     pub static FAILURE_DOMAIN_KEY: &str = "fd";
     pub static SHARD_KEY_KEY: &str = "sk";
+}
+
+#[derive(Default, Debug, Builder, Getters)]
+#[builder(pattern = "owned")]
+pub struct Base {
+    pub value: String,
+    pub transportHeaders: HashMap<String, String>,
 }

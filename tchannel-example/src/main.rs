@@ -1,12 +1,12 @@
-use tchannel::{Channel, Connection};
-use tchannel::messages::thrift::*;
-use tchannel::messages::headers;
-use tchannel::transport::*;
 use std::collections::HashMap;
+use tchannel::messages::headers;
+use tchannel::messages::thrift::*;
+use tchannel::transport::*;
+use tchannel::{Channel, Connection};
 
 use tokio::net::{TcpStream, ToSocketAddrs};
 
-use tokio_util::codec::{Framed};
+use tokio_util::codec::Framed;
 
 use tchannel::frame::{InitFrame, Type};
 
@@ -20,7 +20,7 @@ pub async fn main() -> Result<()> {
     let mut channel = Channel::new(String::from("keyvalue-client")).unwrap();
     let subChannel = channel.makeSubchannel(String::from("keyvalue-service"));
     let mut transportHeaders = HashMap::new();
-    transportHeaders.insert(headers::CALLER_NAME_KEY, & subChannel.service);
+    transportHeaders.insert(headers::CALLER_NAME_KEY, &subChannel.service);
 
     let headers: HashMap<String, String> = HashMap::new();
     let initFrame = InitFrame::new(0, Type::InitRequest, headers);
@@ -63,7 +63,6 @@ pub async fn main() -> Result<()> {
 //     let socket = connect();
 //     return Connection::new(socket);
 // }
-
 
 pub type TResult<T> = std::result::Result<T, std::io::Error>;
 

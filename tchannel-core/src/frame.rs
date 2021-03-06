@@ -1,17 +1,17 @@
 //! Provides a type representing a Redis protocol frame as well as utilities for
 //! parsing frames from a byte array.
 
-use bytes::{Buf, Bytes, BytesMut, BufMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::convert::TryInto;
 use std::fmt;
 use std::io::Cursor;
+use std::iter::Map;
 use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
-use std::iter::Map;
 
 use std::collections::HashMap;
-use std::mem::uninitialized;
 use std::fmt::Write;
+use std::mem::uninitialized;
 
 pub const FRAME_HEADER_LENGTH: u16 = 16;
 pub const ZERO: u8 = 0;
@@ -19,7 +19,11 @@ pub const ZERO: u8 = 0;
 /// A frame in the Redis protocol.
 #[derive(Clone, Debug)]
 pub enum Frame {
-    InitReq { id: i16, version: String, headers: Map<String, String> },
+    InitReq {
+        id: i16,
+        version: String,
+        headers: Map<String, String>,
+    },
     Simple(String),
     Error(String),
     Integer(u64),
@@ -61,14 +65,14 @@ pub enum Type {
     PingResponse = 0xd1,
 
     // Protocol level error.
-    Error = 0xff
+    Error = 0xff,
 }
 
 #[derive(Debug)]
 pub struct TFrame {
     pub id: u32,
     pub frame_type: Type,
-    pub payload: Bytes
+    pub payload: Bytes,
 }
 
 pub trait IFrame {
@@ -98,7 +102,7 @@ impl IFrame for TFrame {
 
 pub struct InitFrame {
     // pub because generics suc
-    pub frame: TFrame
+    pub frame: TFrame,
 }
 
 impl InitFrame {
@@ -108,12 +112,16 @@ impl InitFrame {
         let mut bytes = BytesMut::new();
         bytes.put_u16(InitFrame::VERSION);
         encode_headers(&headers, &mut bytes);
-        let frame = TFrame { id: id, frame_type: frame_type, payload: bytes.freeze() };
-        return InitFrame{ frame }
+        let frame = TFrame {
+            id: id,
+            frame_type: frame_type,
+            payload: bytes.freeze(),
+        };
+        return InitFrame { frame };
     }
 }
 
-fn encode_headers(headers: &HashMap<String,String>, bytes: &mut BytesMut) {
+fn encode_headers(headers: &HashMap<String, String>, bytes: &mut BytesMut) {
     (*bytes).put_u16(headers.len() as u16);
     for (headerKey, headerValue) in headers {
         encode_string(headerKey, bytes);
@@ -127,9 +135,13 @@ fn encode_string(value: &String, bytes: &mut BytesMut) {
 }
 
 impl IFrame for InitFrame {
-    fn getType(&self) -> Type { self.frame.frame_type }
+    fn getType(&self) -> Type {
+        self.frame.frame_type
+    }
 
-    fn getId(&self) -> u32 { (*self).frame.id }
+    fn getId(&self) -> u32 {
+        (*self).frame.id
+    }
 
     fn getPayload(&self) -> &Bytes {
         &self.frame.payload
@@ -140,9 +152,7 @@ impl IFrame for InitFrame {
     }
 }
 
-fn requestFrame() {
-}
-
+fn requestFrame() {}
 
 #[derive(Debug)]
 pub enum Error {

@@ -3,26 +3,16 @@ use crate::messages::*;
 use std::collections::HashMap;
 
 #[derive(Default, Debug)]
-pub struct ThriftRequest<'a> {
-    pub value: String,
-    pub transportHeaders: HashMap<&'a str, &'a String>,
+pub struct ThriftRequest {
+    base: Base,
 }
 
-impl Message for ThriftRequest<'_> {
+impl Message for ThriftRequest {}
 
-}
-
-impl Request for ThriftRequest<'_> {
-
-}
+impl Request for ThriftRequest {}
 
 pub struct ThriftResponse {}
 
-impl Message for ThriftResponse {
+impl Message for ThriftResponse {}
 
-}
-
-impl Response for ThriftResponse {
-
-}
-
+impl Response for ThriftResponse {}

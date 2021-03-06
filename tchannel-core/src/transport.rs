@@ -1,12 +1,12 @@
-use tokio_util::codec::{Decoder, Encoder, Framed};
-use tokio::net::TcpStream;
-use bytes::{Bytes, BytesMut, Buf, BufMut};
-use std::iter::Map;
+use crate::frame::{IFrame, TFrame, Type};
+use crate::frame::{FRAME_HEADER_LENGTH, ZERO};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::io::Error;
 use std::io::Result;
+use std::iter::Map;
 use tokio::io::{AsyncRead, AsyncWrite};
-use crate::frame::{TFrame,IFrame,Type};
-use crate::frame::{FRAME_HEADER_LENGTH,ZERO};
+use tokio::net::TcpStream;
+use tokio_util::codec::{Decoder, Encoder, Framed};
 
 use std::convert::TryInto;
 use std::fmt;
@@ -17,9 +17,8 @@ use std::string::FromUtf8Error;
 use std::collections::HashMap;
 
 pub struct Connection {
-    transport: Framed<TcpStream, TFrameCodec>
+    transport: Framed<TcpStream, TFrameCodec>,
 }
-
 
 // pub fn connect(host: String) -> &Connection {
 //     unimplemented!()
@@ -28,24 +27,24 @@ pub struct Connection {
 #[derive(Default)]
 pub struct TFrameCodec;
 
-impl TFrameCodec {
-}
+impl TFrameCodec {}
 
 impl Decoder for TFrameCodec {
     type Item = TFrame;
     type Error = std::io::Error;
 
-    fn decode(
-        &mut self,
-        src: &mut BytesMut
-    ) -> Result<Option<Self::Item>> {
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>> {
         let size = src.get_u16() - FRAME_HEADER_LENGTH;
         let frame_type = num::FromPrimitive::from_u8(src.get_u8()).unwrap(); // if not?
         src.advance(1); // skip
         let id = src.get_u32();
         src.advance(8);
         let payload = Bytes::from(src.split());
-        let frame = TFrame { id: id, frame_type: frame_type, payload: payload };
+        let frame = TFrame {
+            id: id,
+            frame_type: frame_type,
+            payload: payload,
+        };
         Ok(Some(frame))
     }
 }

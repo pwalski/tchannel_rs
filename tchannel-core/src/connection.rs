@@ -1,8 +1,8 @@
 use crate::frame::{self, Frame, IFrame};
 
-use crate::frame::{FRAME_HEADER_LENGTH,ZERO};
+use crate::frame::{FRAME_HEADER_LENGTH, ZERO};
 
-use bytes::{Buf, BytesMut, BufMut};
+use bytes::{Buf, BufMut, BytesMut};
 use std::io::{self, Cursor};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::net::TcpStream;
@@ -16,7 +16,7 @@ pub struct Connection {
 pub enum Direction {
     None,
     In,
-    Out
+    Out,
 }
 
 impl Connection {
@@ -28,7 +28,6 @@ impl Connection {
     }
 
     pub async fn write_iframe(&mut self, frame: &IFrame) -> io::Result<()> {
-
         let mut buf = BytesMut::with_capacity(FRAME_HEADER_LENGTH as usize);
         buf.put_u16(frame.getSize() as u16 + FRAME_HEADER_LENGTH);
         buf.put_u8(frame.getType() as u8);
@@ -38,7 +37,6 @@ impl Connection {
             buf.put_u8(ZERO)
         }
         let frame_payload = buf.chain(frame.getPayload().chunk());
-
 
         println!("writing payload");
         while frame_payload.has_remaining() {
@@ -83,7 +81,7 @@ impl Connection {
             Err(e) => Err(e.into()),
         }
     }
-    
+
     pub async fn write_frame(&mut self, frame: &Frame) -> io::Result<()> {
         match frame {
             Frame::Array(val) => {
@@ -100,12 +98,15 @@ impl Connection {
 
     async fn write_value(&mut self, frame: &Frame) -> io::Result<()> {
         match frame {
-            Frame::InitReq { id, version, headers} => {
+            Frame::InitReq {
+                id,
+                version,
+                headers,
+            } => {
                 println!("id {} version {}", id, version);
 
                 self.socket.write_i16(*id);
             }
-
 
             Frame::Simple(val) => {
                 self.socket.write_u8(b'+').await?;

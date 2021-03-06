@@ -2,10 +2,18 @@ extern crate num;
 #[macro_use]
 extern crate num_derive;
 
-pub mod messages;
+#[macro_use]
+extern crate derive_builder;
+
+#[macro_use]
+extern crate derive_getters;
+
+pub mod channel;
+pub mod codec;
 pub mod connection;
 pub mod frame;
-pub mod codec;
+pub mod handlers;
+pub mod messages;
 pub mod transport;
 
 use messages::thrift::*;
@@ -20,25 +28,31 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct Channel {
     id: u32,
     connectionOptions: ConnectionOptions,
-    peers: PeerManager
+    peers: PeerManager,
 }
 
 impl Channel {
     pub fn new(name: String) -> Result<Channel> {
-        let peers = PeerManager{};
-        let connectionOptions = ConnectionOptions{};
-        let channel = Channel{id: 1, connectionOptions, peers};
+        let peers = PeerManager {};
+        let connectionOptions = ConnectionOptions {};
+        let channel = Channel {
+            id: 1,
+            connectionOptions,
+            peers,
+        };
         Ok(channel)
     }
 
     // Make subchannel for given service name.
     pub fn makeSubchannel(&mut self, name: String) -> SubChannel {
-        SubChannel { service: String::from("my_service") }
+        SubChannel {
+            service: String::from("my_service"),
+        }
     }
 }
 
 pub struct SubChannel {
-    pub service: String
+    pub service: String,
 }
 
 impl SubChannel {
@@ -53,13 +67,11 @@ impl SubChannel {
     }
 }
 
-pub struct ConnectionOptions {
-}
+pub struct ConnectionOptions {}
 
 use tokio::net::ToSocketAddrs;
 
-pub struct PeerManager {
-}
+pub struct PeerManager {}
 
 impl PeerManager {
     pub async fn connect<T: ToSocketAddrs>(addr: T) -> crate::Result<Connection> {
@@ -87,15 +99,7 @@ impl PeerManager {
 
 pub use connection::Connection;
 
-
-pub struct Peer {
-}
-
-use messages::{Response, Request};
-
-pub trait RequestHandler<REQ: Request, RES: Response> {
-    fn handle(response: REQ) -> RES;
-}
+pub struct Peer {}
 
 #[cfg(test)]
 mod tests {
