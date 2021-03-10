@@ -1,12 +1,13 @@
 extern crate num;
+
+#[macro_use]
+extern crate getset;
+
 #[macro_use]
 extern crate num_derive;
 
 #[macro_use]
 extern crate derive_builder;
-
-#[macro_use]
-extern crate derive_getters;
 
 pub mod channel;
 pub mod codec;
@@ -28,12 +29,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct Channel {
     id: u32,
     connectionOptions: ConnectionOptions,
-    peers: PeerManager,
+    peers: Peers,
 }
 
 impl Channel {
     pub fn new(name: String) -> Result<Channel> {
-        let peers = PeerManager {};
+        let peers = Peers {};
         let connectionOptions = ConnectionOptions {};
         let channel = Channel {
             id: 1,
@@ -71,9 +72,9 @@ pub struct ConnectionOptions {}
 
 use tokio::net::ToSocketAddrs;
 
-pub struct PeerManager {}
+pub struct Peers {}
 
-impl PeerManager {
+impl Peers {
     pub async fn connect<T: ToSocketAddrs>(addr: T) -> crate::Result<Connection> {
         let socket = TcpStream::connect(addr).await?;
         let connection = Connection::new(socket);
@@ -81,37 +82,6 @@ impl PeerManager {
     }
 }
 
-// impl PeerManager {
-//     pub async fn connect<T: ToSocketAddrs>(addr: T) -> crate::Result<Client> {
-//         // The `addr` argument is passed directly to `TcpStream::connect`. This
-//         // performs any asynchronous DNS lookup and attempts to establish the TCP
-//         // connection. An error at either step returns an error, which is then
-//         // bubbled up to the caller of `mini_redis` connect.
-//         let socket = TcpStream::connect(addr).await?;
-//
-//         // Initialize the connection state. This allocates read/write buffers to
-//         // perform redis protocol frame parsing.
-//         let connection = Connection::new(socket);
-//
-//         Ok(Client { connection })
-//     }
-// }
-
 pub use connection::Connection;
 
 pub struct Peer {}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn functional_test() {
-        // - new channel for client
-
-        // - register handler to channel
-
-        // - add peer using addr string
-        // - create subchannel using serviceName string
-        // - create client using channel, subchannel, clientoptions, and serviceName
-        assert_eq!(2 + 2, 4);
-    }
-}

@@ -1,14 +1,32 @@
 use crate::handlers::RequestHandler;
 use crate::messages::{Request, Response};
+use crate::Result;
+use crate::connection::Connection;
+
 use std::collections::HashMap;
 
-#[derive(Debug)]
+use tokio::net::ToSocketAddrs;
+use tokio::net::TcpStream;
+
+
+#[derive(Debug, Default, Builder)]
+#[builder(pattern = "owned")]
+#[builder(build_fn(name = "build_internal"))]
 pub struct TChannel {
-    service_name: String,
+    subchannels: HashMap<String, SubChannel>,
+    connectionOptions: ConnectionOptions,
+    peers: Peers,
+}
+
+impl TChannelBuilder {
+    pub fn build(mut self) -> ::std::result::Result<TChannel, String> {
+        self.peers = Some(Peers{});
+        self.build_internal()
+    }
 }
 
 impl TChannel {
-    pub fn makeSubchannel<HANDLER: RequestHandler>(service_name: &str) -> SubChannel {
+    pub fn makeSubchannel(&mut self, service_name: &str) -> SubChannel {
         SubChannel {
             service_name: service_name.to_string(),
             handlers: HashMap::new(),
@@ -16,27 +34,10 @@ impl TChannel {
     }
 }
 
-pub struct TChannelBuilder {
-    service_name: String,
-}
-
-impl TChannelBuilder {
-    pub fn new(service_name: &str) -> TChannelBuilder {
-        TChannelBuilder {
-            service_name: String::from(service_name),
-        }
-    }
-
-    pub fn build(self) -> TChannel {
-        TChannel {
-            service_name: self.service_name,
-        }
-    }
-}
-
+#[derive(Debug)]
 pub struct SubChannel {
     service_name: String,
-    handlers: HashMap<String, Box<RequestHandler<REQ = Request, RES = Response>>>,
+    handlers: HashMap<String, Box<dyn RequestHandler>>,
 }
 
 impl SubChannel {
@@ -49,7 +50,23 @@ impl SubChannel {
         self
     }
 
-    async fn send<REQ: Request, RES: Response>(request: REQ, host: String, port: u16) -> RES {
-        unimplemented!()
+    pub fn send(&self, request: &dyn Request, host: &str, port: u16) -> Result<Box<dyn Response>> {
+        self.handlers.get("").unwrap().handle(request)
     }
 }
+
+#[derive(Debug, Default, Builder)]
+pub struct ConnectionOptions {}
+
+#[derive(Debug, Default)]
+pub struct Peers {}
+
+impl Peers {
+    pub async fn connect<T: ToSocketAddrs>(addr: T) -> crate::Result<Connection> {
+        let socket = TcpStream::connect(addr).await?;
+        let connection = Connection::new(socket);
+        return Ok(connection);
+    }
+}
+
+pub struct Peer {}

@@ -7,13 +7,19 @@ use tchannel::Result;
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
-    let service_name = "app";
-    let tchannel = TChannelBuilder::new(service_name).build();
+    let mut tchannel = TChannelBuilder::default().build().unwrap();
+
+    let subchannel_name = "sub_channel";
+    let subchannel = tchannel.makeSubchannel(subchannel_name);
+
     let base = BaseBuilder::default()
         .transportHeaders(HashMap::new())
         .build()
         .unwrap();
-    let subchannel_name = "sub_channel";
     let request = RawRequestBuilder::default().base(base).build().unwrap();
+
+    let response = subchannel.send(&request, "192.168.50.172", 8888).unwrap();
+
+    println!("Respose: TODO");
     Ok(())
 }

@@ -1,9 +1,7 @@
 use crate::messages::{Request, Response};
 use crate::Result;
+use std::fmt::Debug;
 
-pub trait RequestHandler {
-    type REQ: Request;
-    type RES: Response;
-
-    fn handle(self: &mut Self, request: Self::REQ) -> Result<Self::RES>;
+pub trait RequestHandler: Debug {
+    fn handle(&self, request: &dyn Request) -> Result<Box<dyn Response>>;
 }
