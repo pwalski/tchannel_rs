@@ -10,7 +10,7 @@ pub async fn main() -> Result<()> {
     let mut tchannel = TChannelBuilder::default().build().unwrap();
 
     let subchannel_name = "sub_channel";
-    let subchannel = tchannel.makeSubchannel(subchannel_name);
+    let subchannel = tchannel.make_subchannel(subchannel_name);
 
     let base = BaseBuilder::default()
         .transportHeaders(HashMap::new())

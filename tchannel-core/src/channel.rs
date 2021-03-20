@@ -10,6 +10,8 @@ use tokio::net::TcpStream;
 use crate::frame::Type::Error;
 
 use tokio::net::lookup_host;
+use std::rc::Rc;
+use std::ops::Deref;
 
 
 #[derive(Default, Builder)]
@@ -65,23 +67,21 @@ pub struct ConnectionOptions {}
 
 #[derive(Debug, Default, Clone)]
 pub struct PeersPool {
-    peers: HashMap<SocketAddr, Peer>
+    peers: HashMap<SocketAddr, Rc<Peer>>
 }
 
 impl PeersPool {
-    pub fn get_or_create<ADDR: ToSocketAddrs>(&mut self, addr: SocketAddr) -> crate::Result<&Peer> {
-        /*
-        match self.peers.get(&addr) {
-            Some(peer) => Ok(peer),
-            None => self.create(addr),
+    pub fn get_or_add<ADDR: ToSocketAddrs>(&mut self, addr: SocketAddr) -> Rc<Peer> {
+        if let Some(peer) = self.peers.get(&addr) {
+            return peer.clone();
         }
-        */
-        unimplemented!()
+        self.add(addr)
     }
 
-    pub fn create(&mut self, addr: SocketAddr) -> crate::Result<&Peer> {
-        self.peers.insert(addr,Peer { address: addr });
-        unimplemented!()
+    fn add(&mut self, addr: SocketAddr) -> Rc<Peer> {
+        let peer = Rc::new(Peer { address: addr });
+        self.peers.insert(addr,peer.clone());
+        return peer;
     }
 
     pub async fn connect<T: ToSocketAddrs>(addr: T) -> crate::Result<Connection> {
