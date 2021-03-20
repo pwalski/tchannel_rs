@@ -12,6 +12,7 @@ impl Message for RawRequest {}
 
 impl Request for RawRequest {}
 
+#[derive(Debug)]
 pub struct RawResponse {}
 
 impl Message for RawResponse {}

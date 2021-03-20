@@ -18,8 +18,8 @@ pub async fn main() -> Result<()> {
         .unwrap();
     let request = RawRequestBuilder::default().base(base).build().unwrap();
 
-    let response = subchannel.send(&request, "192.168.50.172", 8888).unwrap();
+    let response: RawResponse = subchannel.send(request, "192.168.50.172", 8888).unwrap();
 
-    println!("Respose: TODO");
+    println!("Respose: {:?}", response);
     Ok(())
 }

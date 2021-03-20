@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Debug;
 
 pub mod raw;
 pub mod serializers;
@@ -6,9 +7,9 @@ pub mod thrift;
 
 pub trait Message {}
 
-pub trait Request {}
+pub trait Request: Debug {}
 
-pub trait Response {}
+pub trait Response: Debug {}
 
 pub mod headers {
     pub static ARG_SCHEME_KEY: &str = "as";

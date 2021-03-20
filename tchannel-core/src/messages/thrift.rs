@@ -11,6 +11,7 @@ impl Message for ThriftRequest {}
 
 impl Request for ThriftRequest {}
 
+#[derive(Debug)]
 pub struct ThriftResponse {}
 
 impl Message for ThriftResponse {}
