@@ -5,6 +5,8 @@ use tchannel::messages::*;
 use tchannel::Error;
 use tchannel::Result;
 
+use tokio::net::lookup_host;
+
 #[tokio::main]
 pub async fn main() -> Result<()> {
     let mut tchannel = TChannelBuilder::default().build().unwrap();
@@ -17,8 +19,8 @@ pub async fn main() -> Result<()> {
         .build()
         .unwrap();
     let request = RawRequestBuilder::default().base(base).build().unwrap();
-
-    let response: RawResponse = subchannel.send(request, "192.168.50.172", 8888).unwrap();
+    let addr = lookup_host("192.168.50.172").await.unwrap().next()?;
+    let response: RawResponse = subchannel.send(request, addr, 8888).unwrap();
 
     println!("Respose: {:?}", response);
     Ok(())

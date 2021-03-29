@@ -24,7 +24,7 @@ pub struct Connection {
 //     unimplemented!()
 // }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct TFrameCodec;
 
 impl TFrameCodec {}

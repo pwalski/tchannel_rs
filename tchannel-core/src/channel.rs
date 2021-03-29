@@ -9,9 +9,13 @@ use tokio::net::ToSocketAddrs;
 use tokio::net::TcpStream;
 use crate::frame::Type::Error;
 
-use tokio::net::lookup_host;
 use std::rc::Rc;
 use std::ops::Deref;
+use tokio_util::codec::Framed;
+use crate::transport::TFrameCodec;
+use std::cell::{Cell, RefCell};
+use std::borrow::BorrowMut;
+use std::sync::{Arc, Mutex, RwLock};
 
 
 #[derive(Default, Builder)]
@@ -19,14 +23,15 @@ use std::ops::Deref;
 #[builder(build_fn(name = "build_internal"))]
 pub struct TChannel {
     subchannels: HashMap<String, SubChannel>,
-    connectionOptions: ConnectionOptions,
+    connection_options: ConnectionOptions,
     #[builder(field(private))]
-    peers: PeersPool,
+    peers_pool: Arc<PeersPool>,
 }
 
 impl TChannelBuilder {
     pub fn build(mut self) -> ::std::result::Result<TChannel, String> {
-        self.peers(PeersPool::default());
+        let peers = PeersPool::default();
+        self.peers_pool(Arc::new(peers));
         self.build_internal()
     }
 }
@@ -36,6 +41,7 @@ impl TChannel {
         SubChannel {
             service_name: service_name.to_string(),
             handlers: HashMap::new(),
+            peers_pool: self.peers_pool.clone(),
         }
     }
 }
@@ -44,6 +50,7 @@ impl TChannel {
 pub struct SubChannel {
     service_name: String,
     handlers: HashMap<String, Box<RequestHandler>>,
+    peers_pool: Arc<PeersPool>,
 }
 
 impl SubChannel {
@@ -56,7 +63,13 @@ impl SubChannel {
         self
     }
 
-    pub fn send<REQ: Request, RES: Response>(&self, request: REQ, host: &str, port: u16) -> RES {
+    pub async fn send<REQ: Request, RES: Response>(&mut self, request: REQ, host: SocketAddr, port: u16) -> RES {
+        let peer = self.peers_pool.get_or_add(host);
+        // let peer = self.peers_pool.get_or_add(host);
+        // match self.peers_pool.try_borrow_mut() {
+        //     Ok(pool) => pool.print_shit()
+        // }
+        println!("done");
         // set transport header
         unimplemented!()
     }
@@ -65,33 +78,58 @@ impl SubChannel {
 #[derive(Debug, Default, Builder, Clone)]
 pub struct ConnectionOptions {}
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct PeersPool {
-    peers: HashMap<SocketAddr, Rc<Peer>>
+    peers: RwLock<HashMap<SocketAddr, Rc<Peer>>>,
 }
 
 impl PeersPool {
-    pub fn get_or_add<ADDR: ToSocketAddrs>(&mut self, addr: SocketAddr) -> Rc<Peer> {
-        if let Some(peer) = self.peers.get(&addr) {
-            return peer.clone();
+
+    pub async fn get_or_add(&self, addr: SocketAddr) -> Result<Rc<Peer>> {
+        let peers = self.peers.read().unwrap(); //TODO handle panic
+        match peers.get(&addr) {
+            Some(peer) => Ok(peer.clone()),
+            None => add(addr)
         }
-        self.add(addr)
+        // match self.peers.read() {
+        //     Ok(peers) => {}
+        //     _ => {}
+        // }
+
+        // let peers = self.peers.
+        //
+        // if let Some(peer) = self.peers.get(&addr) {
+        //     return Ok(peer.clone());
+        // }
     }
 
-    fn add(&mut self, addr: SocketAddr) -> Rc<Peer> {
-        let peer = Rc::new(Peer { address: addr });
-        self.peers.insert(addr,peer.clone());
-        return peer;
+    async fn add(&self, addr: SocketAddr) -> Result<Rc<Peer>> {
+        let mut peers = self.peers.write().unwrap(); //TODO handle panic
+        match peers.get(&addr) {
+            Some(peer) => Ok(peer.clone()),
+            None => {
+                let stream = connect(addr)?;
+                let peer = Rc::new(Peer::from(stream));
+                peers.insert(addr, peer);
+                Ok(peer.clone())
+            }
+        }
     }
 
-    pub async fn connect<T: ToSocketAddrs>(addr: T) -> crate::Result<Connection> {
+    async fn connect<T: ToSocketAddrs>(&self, addr: T) -> crate::Result<Connection> {
         let socket = TcpStream::connect(addr).await?;
         let connection = Connection::new(socket);
         return Ok(connection);
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Peer {
-    address: SocketAddr
+    frames: Framed<TcpStream, TFrameCodec>,
+}
+
+impl From<TcpStream> for Peer {
+    fn from(stream: TcpStream) -> Self {
+        Peer { frames: Framed::new(stream, TFrameCodec) }
+    }
 }
