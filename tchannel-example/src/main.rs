@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use tchannel::messages::headers;
-use tchannel::messages::thrift::*;
+use tchannel::channel::messages::headers;
+use tchannel::channel::messages::thrift::*;
 use tchannel::transport::*;
 use tchannel::{Channel, Connection};
 

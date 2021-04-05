@@ -14,10 +14,9 @@ pub mod codec;
 pub mod connection;
 pub mod frame;
 pub mod handlers;
-pub mod messages;
 pub mod transport;
 
-use messages::thrift::*;
+use channel::messages::thrift::*;
 
 use connection::*;
 

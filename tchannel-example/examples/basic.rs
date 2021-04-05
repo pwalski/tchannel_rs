@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use tchannel::channel::*;
-use tchannel::messages::raw::*;
-use tchannel::messages::*;
+use tchannel::channel::messages::raw::*;
+use tchannel::channel::messages::*;
 use tchannel::Error;
 use tchannel::Result;
 
 use tokio::net::lookup_host;
+use std::net::{SocketAddr};
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
@@ -19,9 +20,10 @@ pub async fn main() -> Result<()> {
         .build()
         .unwrap();
     let request = RawRequestBuilder::default().base(base).build().unwrap();
-    let addr = lookup_host("192.168.50.172").await.unwrap().next()?;
-    let response: RawResponse = subchannel.send(request, addr, 8888).unwrap();
-
-    println!("Respose: {:?}", response);
+    let addr = SocketAddr::from(([192,168,50,172], 8888));
+    match subchannel.send(request, addr, 8888).await {
+        Ok(response) => println!("Respose: {:?}", response),
+        Err(error) => println!("Fail: {:?}", error)
+    }
     Ok(())
 }

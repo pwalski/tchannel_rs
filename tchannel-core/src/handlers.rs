@@ -1,4 +1,4 @@
-use crate::messages::{Request, Response};
+use crate::channel::messages::{Request, Response};
 use crate::Result;
 use std::fmt::Debug;
 

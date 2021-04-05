@@ -1,4 +1,4 @@
-use crate::messages::*;
+use crate::channel::messages::*;
 
 use std::collections::HashMap;
 

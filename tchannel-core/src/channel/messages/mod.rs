@@ -1,5 +1,9 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
+use crate::Error;
+
+use async_trait::async_trait;
+use std::net::SocketAddr;
 
 pub mod raw;
 pub mod serializers;
@@ -27,4 +31,9 @@ pub mod headers {
 pub struct Base {
     pub value: String,
     pub transportHeaders: HashMap<String, String>,
+}
+
+#[async_trait]
+pub trait MessageChannel<REQ: Request, RES: Response> {
+    async fn send(&self, request: REQ, host: SocketAddr, port: u16) -> Result<RES, Error>;
 }
