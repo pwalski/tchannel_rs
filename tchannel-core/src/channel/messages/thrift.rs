@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 #[derive(Default, Debug)]
 pub struct ThriftRequest {
-    base: Base,
+    base: BaseRequest,
 }
 
 impl Message for ThriftRequest {}

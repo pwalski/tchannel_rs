@@ -1,25 +1,24 @@
 pub mod messages;
 
-use crate::handlers::RequestHandler;
-use crate::channel::messages::{Request, Response};
-use crate::Result;
+use crate::channel::messages::{Request, Response, ResponseBuilder};
 use crate::connection::Connection;
+use crate::handlers::RequestHandler;
+use crate::Result;
 
+use crate::frame::Type::Error;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use tokio::net::ToSocketAddrs;
 use tokio::net::TcpStream;
-use crate::frame::Type::Error;
+use tokio::net::ToSocketAddrs;
 
 use std::ops::Deref;
 // use tokio_util::codec::Framed;
-use crate::transport::TFrameCodec;
-use std::cell::{Cell, RefCell};
-use std::borrow::BorrowMut;
-use std::sync::{Arc, Mutex, RwLock};
 use crate::channel::messages::raw::{RawRequest, RawResponse};
 use crate::channel::messages::thrift::{ThriftRequest, ThriftResponse};
-
+use crate::transport::TFrameCodec;
+use std::borrow::BorrowMut;
+use std::cell::{Cell, RefCell};
+use std::sync::{Arc, Mutex, RwLock};
 
 #[derive(Default, Builder)]
 #[builder(pattern = "mutable")]
@@ -28,7 +27,7 @@ pub struct TChannel {
     subchannels: HashMap<String, SubChannel>,
     connection_options: ConnectionOptions,
     #[builder(field(private))]
-    pub (in super) peers_pool: Arc<PeersPool>,
+    pub(super) peers_pool: Arc<PeersPool>,
 }
 
 impl TChannelBuilder {
@@ -57,13 +56,19 @@ pub struct SubChannel {
 }
 
 impl SubChannel {
-    pub fn register<HANDLER: >(
-        &mut self,
-        handler_name: &str,
-        handler: HANDLER,
-    ) -> &Self {
+    pub fn register<HANDLER>(&mut self, handler_name: &str, handler: HANDLER) -> &Self {
         //TODO
         self
+    }
+
+    async fn send<REQ: Request, RES: Response, BUILDER: ResponseBuilder<RES>>(
+        &self,
+        request: REQ,
+        responseBuilder: BUILDER,
+        host: SocketAddr,
+        port: u16,
+    ) -> Result<RES> {
+        Ok(responseBuilder.build())
     }
 }
 
@@ -76,12 +81,11 @@ pub struct PeersPool {
 }
 
 impl PeersPool {
-
     pub async fn get_or_add(&self, addr: SocketAddr) -> Result<Arc<Peer>> {
         let peers = self.peers.read().unwrap(); //TODO handle panic
         match peers.get(&addr) {
             Some(peer) => Ok(peer.clone()),
-            None => self.add_peer(addr).await
+            None => self.add_peer(addr).await,
         }
     }
 

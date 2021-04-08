@@ -1,6 +1,6 @@
+use crate::Error;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use crate::Error;
 
 use async_trait::async_trait;
 use std::net::SocketAddr;
@@ -8,12 +8,6 @@ use std::net::SocketAddr;
 pub mod raw;
 pub mod serializers;
 pub mod thrift;
-
-pub trait Message {}
-
-pub trait Request: Debug {}
-
-pub trait Response: Debug {}
 
 pub mod headers {
     pub static ARG_SCHEME_KEY: &str = "as";
@@ -26,14 +20,40 @@ pub mod headers {
     pub static SHARD_KEY_KEY: &str = "sk";
 }
 
+pub enum ResponseCode {}
+
+pub trait Message {}
+
+pub trait Request: Debug {}
+
+pub trait Response: Debug {}
+
 #[derive(Default, Debug, Builder, Getters)]
 #[builder(pattern = "owned")]
-pub struct Base {
-    pub value: String,
-    pub transportHeaders: HashMap<String, String>,
+pub struct BaseRequest {
+    value: String,
+    transportHeaders: HashMap<String, String>,
+}
+
+pub struct BaseResponse<BODY> {
+    id: i64,
+    body: BODY,
+    transportHeaders: HashMap<String, String>,
+}
+
+pub trait ResponseBuilder<RES: Response> {
+    fn build(&self) -> RES;
 }
 
 #[async_trait]
-pub trait MessageChannel<REQ: Request, RES: Response> {
-    async fn send(&self, request: REQ, host: SocketAddr, port: u16) -> Result<RES, Error>;
+pub trait MessageChannel {
+    type REQ: Request;
+    type RES: Response;
+
+    async fn send(
+        &self,
+        request: Self::REQ,
+        host: SocketAddr,
+        port: u16,
+    ) -> Result<Self::RES, Error>;
 }
