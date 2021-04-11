@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use tchannel::channel::messages::headers;
 use tchannel::channel::messages::thrift::*;
+use tchannel::channel::*;
 use tchannel::transport::*;
 
 use tokio::net::{TcpStream, ToSocketAddrs};
@@ -12,15 +12,16 @@ use tchannel::frame::{InitFrame, Type};
 use tchannel::Result;
 
 use futures::SinkExt;
+use tchannel::channel::messages::TransportHeader;
+use tchannel::channel::TChannel;
 use tokio_stream::StreamExt;
-
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
-    // let mut channel = Channel::new(String::from("keyvalue-client")).unwrap();
-    // let subChannel = channel.makeSubchannel(String::from("keyvalue-service"));
-    // let mut transportHeaders = HashMap::new();
-    // transportHeaders.insert(headers::CALLER_NAME_KEY, &subChannel.service);
+    let mut channel = TChannelBuilder::default().build().unwrap();
+    let subChannel = channel.make_subchannel("keyvalue-service");
+    let mut transportHeaders = HashMap::new();
+    transportHeaders.insert(TransportHeader::CALLER_NAME_KEY, "keyvalue-service");
 
     let headers: HashMap<String, String> = HashMap::new();
     let initFrame = InitFrame::new(0, Type::InitRequest, headers);

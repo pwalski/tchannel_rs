@@ -68,6 +68,8 @@ impl SubChannel {
         host: SocketAddr,
         port: u16,
     ) -> Result<RES> {
+        // let peer = self.peers_pool.get_or_add(host).await?;
+
         Ok(responseBuilder.build())
     }
 }

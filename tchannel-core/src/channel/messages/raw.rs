@@ -1,6 +1,8 @@
 use crate::channel::messages::*;
 use crate::channel::SubChannel;
+use crate::Result;
 use std::collections::HashMap;
+use std::future::Future;
 
 #[derive(Default, Debug, Builder, Getters)]
 #[builder(pattern = "owned")]
@@ -33,17 +35,8 @@ impl MessageChannel for SubChannel {
     type REQ = RawRequest;
     type RES = RawResponse;
 
-    async fn send(
-        &self,
-        request: Self::REQ,
-        host: SocketAddr,
-        port: u16,
-    ) -> Result<Self::RES, Error> {
-        // let peer = self.peers_pool.get_or_add(host);
-        // match self.peers_pool.try_borrow_mut() {
-        //     Ok(pool) => pool.print_shit()
-        // }
-        println!("done");
-        unimplemented!()
+    async fn send(&self, request: Self::REQ, host: SocketAddr, port: u16) -> Result<Self::RES> {
+        let responseBuilder = RawResponseBuilder {};
+        self.send(request, responseBuilder, host, port).await
     }
 }
