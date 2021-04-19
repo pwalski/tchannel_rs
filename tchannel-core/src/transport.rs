@@ -1,8 +1,6 @@
 use crate::frame::{IFrame, TFrame, Type};
 use crate::frame::{FRAME_HEADER_LENGTH, ZERO};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use std::io::Error;
-use std::io::Result;
 use std::iter::Map;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
@@ -14,6 +12,7 @@ use std::io::Cursor;
 use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
 
+use crate::TChannelError;
 use std::collections::HashMap;
 
 pub struct Connection {
@@ -27,13 +26,11 @@ pub struct Connection {
 #[derive(Default, Debug)]
 pub struct TFrameCodec;
 
-impl TFrameCodec {}
-
 impl Decoder for TFrameCodec {
     type Item = TFrame;
-    type Error = std::io::Error;
+    type Error = TChannelError;
 
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>> {
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, TChannelError> {
         let size = src.get_u16() - FRAME_HEADER_LENGTH;
         let frame_type = num::FromPrimitive::from_u8(src.get_u8()).unwrap(); // if not?
         src.advance(1); // skip
@@ -50,9 +47,9 @@ impl Decoder for TFrameCodec {
 }
 
 impl Encoder<TFrame> for TFrameCodec {
-    type Error = std::io::Error;
+    type Error = TChannelError;
 
-    fn encode(&mut self, item: TFrame, dst: &mut BytesMut) -> Result<()> {
+    fn encode(&mut self, item: TFrame, dst: &mut BytesMut) -> Result<(), TChannelError> {
         let len = item.getSize() as u16 + FRAME_HEADER_LENGTH;
         dst.reserve(len as usize);
         dst.put_u16(len);

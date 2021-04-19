@@ -16,7 +16,6 @@ use std::mem::uninitialized;
 pub const FRAME_HEADER_LENGTH: u16 = 16;
 pub const ZERO: u8 = 0;
 
-/// A frame in the Redis protocol.
 #[derive(Clone, Debug)]
 pub enum Frame {
     InitReq {
@@ -300,11 +299,6 @@ impl Frame {
             }
             _ => unimplemented!(),
         }
-    }
-
-    /// Converts the frame to an "unexpected frame" error
-    pub(crate) fn to_error(&self) -> crate::Error {
-        format!("unexpected frame: {}", self).into()
     }
 }
 

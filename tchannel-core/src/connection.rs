@@ -1,6 +1,9 @@
-use crate::frame::{self, Frame, IFrame};
+use crate::frame::{self, Error, Frame, IFrame};
 
 use crate::frame::{FRAME_HEADER_LENGTH, ZERO};
+
+use crate::TChannelError;
+use crate::TChannelError::FrameParsingError;
 
 use bytes::{Buf, BufMut, BytesMut};
 use std::io::{self, Cursor};
@@ -48,7 +51,7 @@ impl Connection {
         self.socket.flush().await
     }
 
-    pub async fn read_frame(&mut self) -> crate::Result<Option<Frame>> {
+    pub async fn read_frame(&mut self) -> Result<Option<Frame>, crate::Error> {
         loop {
             println!("Parsing frame");
             if let Some(frame) = self.parse_frame()? {
@@ -66,7 +69,7 @@ impl Connection {
         }
     }
 
-    fn parse_frame(&mut self) -> crate::Result<Option<Frame>> {
+    fn parse_frame(&mut self) -> Result<Option<Frame>, Error> {
         use frame::Error::Incomplete;
         let mut buf = Cursor::new(&self.buffer[..]);
         match Frame::check(&mut buf) {

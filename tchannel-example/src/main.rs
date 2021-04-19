@@ -9,15 +9,14 @@ use tokio_util::codec::Framed;
 
 use tchannel::frame::{InitFrame, Type};
 
-use tchannel::Result;
-
 use futures::SinkExt;
 use tchannel::channel::messages::TransportHeader;
 use tchannel::channel::TChannel;
+use tchannel::Error;
 use tokio_stream::StreamExt;
 
 #[tokio::main]
-pub async fn main() -> Result<()> {
+pub async fn main() -> Result<(), Error> {
     let mut channel = TChannelBuilder::default().build().unwrap();
     let subChannel = channel.make_subchannel("keyvalue-service");
     let mut transportHeaders = HashMap::new();

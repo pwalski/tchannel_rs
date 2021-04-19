@@ -7,8 +7,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-getset = "0.1.1"
-derive_builder = "0.9.0"
+getset = "0.1"
+derive_builder = "0.9"
 num-derive = "0.3"
 thrift = "0.13"
 tokio = { version = "1", features = ["full"] }
@@ -17,6 +17,7 @@ bytes = "1.0"
 atoi = "0.4"
 num = "0.3"
 num-traits = "0.2"
-async-trait = "0.1.48"
+async-trait = "0.1"
 strum = "0.20"
 strum_macros = "0.20"
+thiserror = "1.0.24"

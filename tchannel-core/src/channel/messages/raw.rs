@@ -1,6 +1,6 @@
 use crate::channel::messages::*;
 use crate::channel::SubChannel;
-use crate::Result;
+use crate::frame::TFrame;
 use std::collections::HashMap;
 use std::future::Future;
 
@@ -22,11 +22,10 @@ impl Message for RawResponse {}
 
 impl Response for RawResponse {}
 
-struct RawResponseBuilder {}
-
-impl ResponseBuilder<RawResponse> for RawResponseBuilder {
-    fn build(&self) -> RawResponse {
-        todo!()
+impl From<TFrame> for RawResponse {
+    fn from(frame: TFrame) -> Self {
+        // todo!()
+        Self {}
     }
 }
 
@@ -35,8 +34,12 @@ impl MessageChannel for SubChannel {
     type REQ = RawRequest;
     type RES = RawResponse;
 
-    async fn send(&self, request: Self::REQ, host: SocketAddr, port: u16) -> Result<Self::RES> {
-        let responseBuilder = RawResponseBuilder {};
-        self.send(request, responseBuilder, host, port).await
+    async fn send(
+        &self,
+        request: Self::REQ,
+        host: SocketAddr,
+        port: u16,
+    ) -> Result<Self::RES, crate::TChannelError> {
+        self.send(request, host, port).await
     }
 }

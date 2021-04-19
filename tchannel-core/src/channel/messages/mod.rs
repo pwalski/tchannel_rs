@@ -1,11 +1,12 @@
-use crate::Error;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
 use async_trait::async_trait;
-use std::convert::AsRef;
+use std::convert::{AsRef, TryFrom};
 use std::future::Future;
 
+use crate::frame::TFrame;
+use crate::TChannelError;
 use std::net::SocketAddr;
 use strum_macros::ToString;
 
@@ -34,7 +35,7 @@ pub enum TransportHeader {
 }
 
 #[derive(ToString, Debug)]
-pub enum ArgScheme {
+pub enum ArgSchemeValue {
     #[strum(serialize = "raw")]
     RAW,
     #[strum(serialize = "json")]
@@ -45,6 +46,16 @@ pub enum ArgScheme {
     THRIFT,
     #[strum(serialize = "sthrift")]
     STREAMING_THRIFT,
+}
+
+#[derive(ToString, Debug)]
+pub enum RetryFlagValue {
+    #[strum(serialize = "n")]
+    NO_RETRY,
+    #[strum(serialize = "c")]
+    RETRY_ON_CONNECTION_ERROR,
+    #[strum(serialize = "t")]
+    RETRY_ON_TIMEOUT,
 }
 
 pub enum ResponseCode {}
@@ -59,22 +70,26 @@ pub trait Response: Debug {}
 #[builder(pattern = "owned")]
 #[builder(build_fn(name = "build_internal"))]
 pub struct BaseRequest {
+    id: i32,
     value: String,
     transportHeaders: HashMap<TransportHeader, String>,
 }
 
 impl BaseRequestBuilder {
-    // pub fn argScheme()
-
     pub fn build(mut self) -> ::std::result::Result<BaseRequest, String> {
-        self.build_internal()
+        let mut baseRequest = Self::set_default_headers(self.build_internal()?);
+        return Ok(baseRequest);
     }
-}
 
-impl BaseRequest {
-    pub fn set_arg_scheme(&mut self, argScheme: ArgScheme) {
-        self.transportHeaders
-            .insert(TransportHeader::ARG_SCHEME_KEY, argScheme.to_string());
+    fn set_default_headers(mut baseRequest: BaseRequest) -> BaseRequest {
+        let headers = &mut baseRequest.transportHeaders;
+        if !(headers.contains_key(&TransportHeader::RETRY_FLAGS_KEY)) {
+            headers.insert(
+                TransportHeader::RETRY_FLAGS_KEY,
+                RetryFlagValue::RETRY_ON_CONNECTION_ERROR.to_string(),
+            );
+        }
+        baseRequest
     }
 }
 
@@ -91,12 +106,12 @@ pub trait ResponseBuilder<RES: Response> {
 #[async_trait]
 pub trait MessageChannel {
     type REQ: Request;
-    type RES: Response;
+    type RES: Response + TryFrom<TFrame>;
 
     async fn send(
         &self,
         request: Self::REQ,
         host: SocketAddr,
         port: u16,
-    ) -> Result<Self::RES, Error>;
+    ) -> Result<Self::RES, TChannelError>;
 }
