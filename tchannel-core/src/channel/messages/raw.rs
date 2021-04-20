@@ -1,8 +1,6 @@
 use crate::channel::messages::*;
 use crate::channel::SubChannel;
 use crate::frame::TFrame;
-use std::collections::HashMap;
-use std::future::Future;
 
 #[derive(Default, Debug, Builder, Getters)]
 #[builder(pattern = "owned")]
@@ -22,10 +20,11 @@ impl Message for RawResponse {}
 
 impl Response for RawResponse {}
 
-impl From<TFrame> for RawResponse {
-    fn from(frame: TFrame) -> Self {
-        // todo!()
-        Self {}
+impl TryFrom<TFrame> for RawResponse {
+    type Error = TChannelError;
+
+    fn try_from(value: TFrame) -> Result<Self, Self::Error> {
+        todo!()
     }
 }
 

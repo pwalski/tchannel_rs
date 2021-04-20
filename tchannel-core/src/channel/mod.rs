@@ -1,26 +1,18 @@
 pub mod messages;
 
-use crate::channel::messages::{Request, Response, ResponseBuilder};
+use crate::channel::messages::{Request, Response};
 use crate::connection::Connection;
-use crate::handlers::RequestHandler;
-use crate::TChannelError;
-
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use tokio::net::TcpStream;
-use tokio::net::ToSocketAddrs;
-
-use std::ops::Deref;
-// use tokio_util::codec::Framed;
-use crate::channel::messages::raw::{RawRequest, RawResponse};
-use crate::channel::messages::thrift::{ThriftRequest, ThriftResponse};
 use crate::frame::TFrame;
+use crate::handlers::RequestHandler;
 use crate::transport::TFrameCodec;
-use std::borrow::BorrowMut;
-use std::cell::{Cell, RefCell};
-use std::io::Error;
+use crate::TChannelError;
+use std::collections::HashMap;
+use std::convert::TryFrom;
+use std::net::SocketAddr;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
+use tokio::net::TcpStream;
+use tokio::net::ToSocketAddrs;
 use tokio::sync::RwLock;
 use tokio_util::codec::Framed;
 
@@ -68,7 +60,7 @@ impl SubChannel {
         self
     }
 
-    async fn send<REQ: Request, RES: Response>(
+    async fn send<REQ: Request, RES: Response + TryFrom<TFrame>>(
         &self,
         request: REQ,
         host: SocketAddr,

@@ -1,7 +1,5 @@
 use crate::channel::messages::*;
 
-use std::collections::HashMap;
-
 #[derive(Default, Debug)]
 pub struct ThriftRequest {
     base: BaseRequest,

@@ -2,16 +2,14 @@
 //! parsing frames from a byte array.
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
+use std::fmt::Write;
 use std::io::Cursor;
 use std::iter::Map;
 use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
-
-use std::collections::HashMap;
-use std::fmt::Write;
-use std::mem::uninitialized;
 
 pub const FRAME_HEADER_LENGTH: u16 = 16;
 pub const ZERO: u8 = 0;
@@ -75,26 +73,26 @@ pub struct TFrame {
 }
 
 pub trait IFrame {
-    fn getType(&self) -> Type;
-    fn getId(&self) -> u32;
-    fn getPayload(&self) -> &Bytes;
-    fn getSize(&self) -> usize;
+    fn frame_type(&self) -> Type;
+    fn id(&self) -> u32;
+    fn payload(&self) -> &Bytes;
+    fn size(&self) -> usize;
 }
 
 impl IFrame for TFrame {
-    fn getType(&self) -> Type {
+    fn frame_type(&self) -> Type {
         self.frame_type
     }
 
-    fn getId(&self) -> u32 {
+    fn id(&self) -> u32 {
         self.id
     }
 
-    fn getPayload(&self) -> &Bytes {
+    fn payload(&self) -> &Bytes {
         &self.payload
     }
 
-    fn getSize(&self) -> usize {
+    fn size(&self) -> usize {
         self.payload.len()
     }
 }
@@ -134,24 +132,22 @@ fn encode_string(value: &String, bytes: &mut BytesMut) {
 }
 
 impl IFrame for InitFrame {
-    fn getType(&self) -> Type {
+    fn frame_type(&self) -> Type {
         self.frame.frame_type
     }
 
-    fn getId(&self) -> u32 {
+    fn id(&self) -> u32 {
         (*self).frame.id
     }
 
-    fn getPayload(&self) -> &Bytes {
+    fn payload(&self) -> &Bytes {
         &self.frame.payload
     }
 
-    fn getSize(&self) -> usize {
-        self.getPayload().len()
+    fn size(&self) -> usize {
+        self.payload().len()
     }
 }
-
-fn requestFrame() {}
 
 #[derive(Debug)]
 pub enum Error {

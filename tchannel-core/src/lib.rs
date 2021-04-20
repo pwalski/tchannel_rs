@@ -10,7 +10,6 @@ extern crate num_derive;
 extern crate derive_builder;
 
 pub mod channel;
-pub mod codec;
 pub mod connection;
 pub mod frame;
 pub mod handlers;

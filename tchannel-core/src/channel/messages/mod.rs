@@ -1,61 +1,57 @@
-use std::collections::HashMap;
-use std::fmt::Debug;
-
-use async_trait::async_trait;
-use std::convert::{AsRef, TryFrom};
-use std::future::Future;
-
 use crate::frame::TFrame;
 use crate::TChannelError;
+use async_trait::async_trait;
+use std::collections::HashMap;
+use std::convert::TryFrom;
+use std::fmt::Debug;
 use std::net::SocketAddr;
 use strum_macros::ToString;
 
 pub mod raw;
-pub mod serializers;
 pub mod thrift;
 
 #[derive(ToString, Debug, PartialEq, Eq, Hash)]
 pub enum TransportHeader {
     #[strum(serialize = "as")]
-    ARG_SCHEME_KEY,
+    ArgSchemeKey,
     #[strum(serialize = "cas")]
-    CLAIM_AT_START_KEY,
+    ClaimAtStartKey,
     #[strum(serialize = "caf")]
-    CLAIM_AT_FINISH_KEY,
+    ClaimAtFinishKey,
     #[strum(serialize = "cn")]
-    CALLER_NAME_KEY,
+    CallerNameKey,
     #[strum(serialize = "re")]
-    RETRY_FLAGS_KEY,
+    RetryFlagsKey,
     #[strum(serialize = "se")]
-    SPECULATIVE_EXECUTION_KEY,
+    SpeculativeExecutionKey,
     #[strum(serialize = "fd")]
-    FAILURE_DOMAIN_KEY,
+    FailureDomainKey,
     #[strum(serialize = "sk")]
-    SHARD_KEY_KEY,
+    ShardKeyKey,
 }
 
 #[derive(ToString, Debug)]
 pub enum ArgSchemeValue {
     #[strum(serialize = "raw")]
-    RAW,
+    Raw,
     #[strum(serialize = "json")]
-    JSON,
+    Json,
     #[strum(serialize = "http")]
-    HTTP,
+    Http,
     #[strum(serialize = "thrift")]
-    THRIFT,
+    Thrift,
     #[strum(serialize = "sthrift")]
-    STREAMING_THRIFT,
+    StreamingThrift,
 }
 
 #[derive(ToString, Debug)]
 pub enum RetryFlagValue {
     #[strum(serialize = "n")]
-    NO_RETRY,
+    NoRetry,
     #[strum(serialize = "c")]
-    RETRY_ON_CONNECTION_ERROR,
+    RetryOnConnectionErrot,
     #[strum(serialize = "t")]
-    RETRY_ON_TIMEOUT,
+    RetryOnTimeout,
 }
 
 pub enum ResponseCode {}
@@ -72,31 +68,31 @@ pub trait Response: Debug {}
 pub struct BaseRequest {
     id: i32,
     value: String,
-    transportHeaders: HashMap<TransportHeader, String>,
+    transport_headers: HashMap<TransportHeader, String>,
 }
 
 impl BaseRequestBuilder {
     pub fn build(mut self) -> ::std::result::Result<BaseRequest, String> {
-        let mut baseRequest = Self::set_default_headers(self.build_internal()?);
-        return Ok(baseRequest);
+        let base_request = Self::set_default_headers(self.build_internal()?);
+        return Ok(base_request);
     }
 
-    fn set_default_headers(mut baseRequest: BaseRequest) -> BaseRequest {
-        let headers = &mut baseRequest.transportHeaders;
-        if !(headers.contains_key(&TransportHeader::RETRY_FLAGS_KEY)) {
+    fn set_default_headers(mut base_request: BaseRequest) -> BaseRequest {
+        let headers = &mut base_request.transport_headers;
+        if !(headers.contains_key(&TransportHeader::RetryFlagsKey)) {
             headers.insert(
-                TransportHeader::RETRY_FLAGS_KEY,
-                RetryFlagValue::RETRY_ON_CONNECTION_ERROR.to_string(),
+                TransportHeader::RetryFlagsKey,
+                RetryFlagValue::RetryOnConnectionErrot.to_string(),
             );
         }
-        baseRequest
+        base_request
     }
 }
 
 pub struct BaseResponse<BODY> {
     id: i64,
     body: BODY,
-    transportHeaders: HashMap<String, String>,
+    transport_headers: HashMap<String, String>,
 }
 
 pub trait ResponseBuilder<RES: Response> {

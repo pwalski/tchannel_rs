@@ -1,10 +1,5 @@
 use crate::frame::{self, Error, Frame, IFrame};
-
 use crate::frame::{FRAME_HEADER_LENGTH, ZERO};
-
-use crate::TChannelError;
-use crate::TChannelError::FrameParsingError;
-
 use bytes::{Buf, BufMut, BytesMut};
 use std::io::{self, Cursor};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
@@ -32,14 +27,14 @@ impl Connection {
 
     pub async fn write_iframe(&mut self, frame: &IFrame) -> io::Result<()> {
         let mut buf = BytesMut::with_capacity(FRAME_HEADER_LENGTH as usize);
-        buf.put_u16(frame.getSize() as u16 + FRAME_HEADER_LENGTH);
-        buf.put_u8(frame.getType() as u8);
+        buf.put_u16(frame.size() as u16 + FRAME_HEADER_LENGTH);
+        buf.put_u8(frame.frame_type() as u8);
         buf.put_u8(ZERO); // zero
-        buf.put_u32(frame.getId());
+        buf.put_u32(frame.id());
         for _ in 0..8 {
             buf.put_u8(ZERO)
         }
-        let frame_payload = buf.chain(frame.getPayload().chunk());
+        let frame_payload = buf.chain(frame.payload().chunk());
 
         println!("writing payload");
         while frame_payload.has_remaining() {

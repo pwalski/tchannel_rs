@@ -1,19 +1,9 @@
-use crate::frame::{IFrame, TFrame, Type};
+use crate::frame::{IFrame, TFrame};
 use crate::frame::{FRAME_HEADER_LENGTH, ZERO};
+use crate::TChannelError;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use std::iter::Map;
-use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio_util::codec::{Decoder, Encoder, Framed};
-
-use std::convert::TryInto;
-use std::fmt;
-use std::io::Cursor;
-use std::num::TryFromIntError;
-use std::string::FromUtf8Error;
-
-use crate::TChannelError;
-use std::collections::HashMap;
 
 pub struct Connection {
     transport: Framed<TcpStream, TFrameCodec>,
@@ -50,16 +40,16 @@ impl Encoder<TFrame> for TFrameCodec {
     type Error = TChannelError;
 
     fn encode(&mut self, item: TFrame, dst: &mut BytesMut) -> Result<(), TChannelError> {
-        let len = item.getSize() as u16 + FRAME_HEADER_LENGTH;
+        let len = item.size() as u16 + FRAME_HEADER_LENGTH;
         dst.reserve(len as usize);
         dst.put_u16(len);
-        dst.put_u8(item.getType() as u8);
+        dst.put_u8(item.frame_type() as u8);
         dst.put_u8(ZERO); // zero
-        dst.put_u32(item.getId());
+        dst.put_u32(item.id());
         for _ in 0..8 {
             dst.put_u8(ZERO)
         }
-        dst.put_slice(item.getPayload());
+        dst.put_slice(item.payload());
         Ok(())
     }
 }
