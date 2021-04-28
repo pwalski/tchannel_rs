@@ -13,7 +13,6 @@ pub mod channel;
 pub mod connection;
 pub mod frame;
 pub mod handlers;
-pub mod transport;
 
 use thiserror::Error;
 

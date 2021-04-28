@@ -1,4 +1,4 @@
-use crate::frame::TFrame;
+use crate::channel::frames::TFrame;
 use crate::TChannelError;
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -56,11 +56,11 @@ pub enum RetryFlagValue {
 
 pub enum ResponseCode {}
 
-pub trait Message {}
+pub trait Message: Debug + Sized {}
 
-pub trait Request: Debug {}
+pub trait Request: Message + Debug {}
 
-pub trait Response: Debug {}
+pub trait Response: Message + Debug {}
 
 #[derive(Default, Debug, Builder, Getters)]
 #[builder(pattern = "owned")]
@@ -111,3 +111,5 @@ pub trait MessageChannel {
         port: u16,
     ) -> Result<Self::RES, TChannelError>;
 }
+
+pub struct MessageCodec {}

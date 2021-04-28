@@ -1,11 +1,13 @@
+pub mod frames;
 pub mod messages;
 
-use crate::channel::messages::{Request, Response};
+use crate::channel::frames::{TFrame, TFrameCodec};
+use crate::channel::messages::{Message, MessageCodec, Request, Response};
 use crate::connection::Connection;
-use crate::frame::TFrame;
+use crate::frame::Frame;
 use crate::handlers::RequestHandler;
-use crate::transport::TFrameCodec;
-use crate::TChannelError;
+use crate::{Error, TChannelError};
+use bytes::BytesMut;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::net::SocketAddr;
@@ -14,7 +16,7 @@ use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio::net::ToSocketAddrs;
 use tokio::sync::RwLock;
-use tokio_util::codec::Framed;
+use tokio_util::codec::{Decoder, Encoder, Framed};
 
 #[derive(Default, Builder)]
 #[builder(pattern = "owned")]
@@ -68,7 +70,7 @@ impl SubChannel {
     ) -> Result<RES, crate::TChannelError> {
         let peer = self.peers_pool.get_or_add(host).await;
         let messsage_id = self.next_message_id();
-        // RES::try_from()
+        // write to message stream
         unimplemented!()
     }
 
@@ -116,15 +118,23 @@ impl PeersPool {
 
 #[derive(Debug)]
 pub struct Peer {
+    // pub message_stream: Framed<FrameStream, MessageCodec>,
     frame_codec: Framed<TcpStream, TFrameCodec>,
-    // method returning "future" returning response
-    // keep in mind it will not happen immidiatelly after request
 }
 
 impl From<TcpStream> for Peer {
-    fn from(stream: TcpStream) -> Self {
+    fn from(tcp_stream: TcpStream) -> Self {
+        // let tframe_stream = Framed::new(tcp_stream, TFrameCodec);
+        // let frame_stream = Framed::new(tframe_stream, FrameCodec);
         Peer {
-            frame_codec: Framed::new(stream, TFrameCodec),
+            // message_stream: Framed::new(frame_stream, MessageCodec),
+            frame_codec: Framed::new(tcp_stream, TFrameCodec {}),
         }
     }
 }
+
+type TFrameStream = Framed<TcpStream, TFrameCodec>;
+
+type FrameStream = Framed<TFrameStream, TFrameCodec>;
+
+type MessageStream = Framed<FrameStream, MessageCodec>;

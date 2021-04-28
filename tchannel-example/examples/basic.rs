@@ -14,13 +14,13 @@ pub async fn main() -> Result<(), Error> {
         .transport_headers(HashMap::new())
         .build()
         .unwrap();
-    let request = RawRequestBuilder::default()
+    let request = RawMessageBuilder::default()
         .base(requestBase)
         .build()
         .unwrap();
     let addr = SocketAddr::from(([192, 168, 50, 172], 8888));
     match subchannel.send(request, addr, 8888).await {
-        Ok(response) => println!("Respose: {:?}", response),
+        Ok(response) => println!("Response: {:?}", response),
         Err(error) => println!("Fail: {:?}", error),
     }
     Ok(())

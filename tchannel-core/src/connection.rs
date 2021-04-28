@@ -1,5 +1,5 @@
-use crate::frame::{self, Error, Frame, IFrame};
-use crate::frame::{FRAME_HEADER_LENGTH, ZERO};
+use crate::channel::frames::{TFrame, FRAME_HEADER_LENGTH, ZERO};
+use crate::frame::{self, Error, Frame};
 use bytes::{Buf, BufMut, BytesMut};
 use std::io::{self, Cursor};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
@@ -25,12 +25,12 @@ impl Connection {
         }
     }
 
-    pub async fn write_iframe(&mut self, frame: &IFrame) -> io::Result<()> {
+    pub async fn write_frame(&mut self, frame: &TFrame) -> io::Result<()> {
         let mut buf = BytesMut::with_capacity(FRAME_HEADER_LENGTH as usize);
         buf.put_u16(frame.size() as u16 + FRAME_HEADER_LENGTH);
-        buf.put_u8(frame.frame_type() as u8);
+        buf.put_u8(*frame.frame_type() as u8);
         buf.put_u8(ZERO); // zero
-        buf.put_u32(frame.id());
+        buf.put_u32(*frame.id());
         for _ in 0..8 {
             buf.put_u8(ZERO)
         }
@@ -80,7 +80,7 @@ impl Connection {
         }
     }
 
-    pub async fn write_frame(&mut self, frame: &Frame) -> io::Result<()> {
+    pub async fn write_noidea_frame(&mut self, frame: &Frame) -> io::Result<()> {
         match frame {
             Frame::Array(val) => {
                 self.socket.write_u8(b'*').await?;

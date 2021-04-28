@@ -1,8 +1,8 @@
 use futures::SinkExt;
 use std::collections::HashMap;
+use tchannel::channel::frames::{TFrameCodec, Type};
 use tchannel::channel::messages::TransportHeader;
-use tchannel::frame::{InitFrame, Type};
-use tchannel::transport::*;
+use tchannel::frame::InitFrame;
 use tchannel::Error;
 use tokio::net::TcpStream;
 use tokio_stream::StreamExt;
@@ -35,7 +35,7 @@ pub async fn main() -> Result<(), Error> {
     // Codec
 
     let stream = connect().await.unwrap();
-    let mut transport = Framed::new(stream, TFrameCodec);
+    let mut transport = Framed::new(stream, TFrameCodec::default());
     let sent = transport.send(init_frame.frame).await;
     println!("Sent: {:?}", sent);
 

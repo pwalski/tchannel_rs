@@ -1,6 +1,7 @@
 //! Provides a type representing a Redis protocol frame as well as utilities for
 //! parsing frames from a byte array.
 
+use crate::channel::frames::{TFrame, TFrameBuilder, Type};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -10,9 +11,6 @@ use std::io::Cursor;
 use std::iter::Map;
 use std::num::TryFromIntError;
 use std::string::FromUtf8Error;
-
-pub const FRAME_HEADER_LENGTH: u16 = 16;
-pub const ZERO: u8 = 0;
 
 #[derive(Clone, Debug)]
 pub enum Frame {
@@ -29,74 +27,6 @@ pub enum Frame {
     Array(Vec<Frame>),
 }
 
-#[derive(Copy, Clone, Debug, FromPrimitive)]
-pub enum Type {
-    // First message on every connection must be init
-    InitRequest = 0x1,
-
-    // Remote response to init req
-    InitResponse = 0x2,
-
-    // RPC method request
-    CallRequest = 0x3,
-
-    // RPC method response
-    CallResponse = 0x4,
-
-    // RPC request continuation fragment
-    CallRequestContinue = 0x13,
-
-    // RPC response continuation fragment
-    CallResponseContinue = 0x14,
-
-    // CancelFrame an outstanding call req / forward req (no body)
-    Cancel = 0xc0,
-
-    // ClaimFrame / cancel a redundant request
-    Claim = 0xc1,
-
-    // Protocol level ping req (no body)
-    PingRequest = 0xd0,
-
-    // PingFrame res (no body)
-    PingResponse = 0xd1,
-
-    // Protocol level error.
-    Error = 0xff,
-}
-
-#[derive(Debug)]
-pub struct TFrame {
-    pub id: u32,
-    pub frame_type: Type,
-    pub payload: Bytes,
-}
-
-pub trait IFrame {
-    fn frame_type(&self) -> Type;
-    fn id(&self) -> u32;
-    fn payload(&self) -> &Bytes;
-    fn size(&self) -> usize;
-}
-
-impl IFrame for TFrame {
-    fn frame_type(&self) -> Type {
-        self.frame_type
-    }
-
-    fn id(&self) -> u32 {
-        self.id
-    }
-
-    fn payload(&self) -> &Bytes {
-        &self.payload
-    }
-
-    fn size(&self) -> usize {
-        self.payload.len()
-    }
-}
-
 pub struct InitFrame {
     // pub because generics suc
     pub frame: TFrame,
@@ -105,15 +35,16 @@ pub struct InitFrame {
 impl InitFrame {
     const VERSION: u16 = 2;
 
-    pub fn new(id: u32, frame_type: Type, headers: HashMap<String, String>) -> InitFrame {
+    pub fn new(id: u32, frame_type: Type, headers: HashMap<String, String>) -> Self {
         let mut bytes = BytesMut::new();
         bytes.put_u16(InitFrame::VERSION);
         encode_headers(&headers, &mut bytes);
-        let frame = TFrame {
-            id: id,
-            frame_type: frame_type,
-            payload: bytes.freeze(),
-        };
+        let frame = TFrameBuilder::default()
+            .id(id)
+            .frame_type(frame_type)
+            .payload(bytes.freeze())
+            .build()
+            .unwrap(); //TODO
         return InitFrame { frame };
     }
 }
@@ -129,24 +60,6 @@ fn encode_headers(headers: &HashMap<String, String>, bytes: &mut BytesMut) {
 fn encode_string(value: &String, bytes: &mut BytesMut) {
     bytes.put_u16(value.len() as u16);
     bytes.write_str(value).unwrap(); //todo handle Result
-}
-
-impl IFrame for InitFrame {
-    fn frame_type(&self) -> Type {
-        self.frame.frame_type
-    }
-
-    fn id(&self) -> u32 {
-        (*self).frame.id
-    }
-
-    fn payload(&self) -> &Bytes {
-        &self.frame.payload
-    }
-
-    fn size(&self) -> usize {
-        self.payload().len()
-    }
 }
 
 #[derive(Debug)]
