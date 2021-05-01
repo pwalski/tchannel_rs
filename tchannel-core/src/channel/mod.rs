@@ -9,7 +9,7 @@ use crate::handlers::RequestHandler;
 use crate::{Error, TChannelError};
 use bytes::BytesMut;
 use std::collections::HashMap;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
@@ -62,7 +62,7 @@ impl SubChannel {
         self
     }
 
-    async fn send<REQ: Request, RES: Response + TryFrom<TFrame>>(
+    async fn send<REQ: Request + TryInto<TFrame>, RES: Response + TryFrom<TFrame>>(
         &self,
         request: REQ,
         host: SocketAddr,

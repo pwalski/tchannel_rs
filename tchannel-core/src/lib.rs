@@ -9,6 +9,9 @@ extern crate num_derive;
 #[macro_use]
 extern crate derive_builder;
 
+#[macro_use]
+extern crate bitflags;
+
 pub mod channel;
 pub mod connection;
 pub mod frame;

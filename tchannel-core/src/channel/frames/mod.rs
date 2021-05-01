@@ -1,5 +1,5 @@
-use crate::channel::TFrameStream;
-use crate::Error;
+mod payloads;
+
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -39,7 +39,7 @@ pub enum Type {
     PingResponse = 0xd1,
 
     // Protocol level error.
-    Error = 0xff,
+    Error = 0x00,
 }
 
 #[derive(Debug, Getters, Builder)]
@@ -62,7 +62,7 @@ impl TFrame {
 pub struct TFrameCodec {}
 
 impl Encoder<TFrame> for TFrameCodec {
-    type Error = Error;
+    type Error = crate::Error;
 
     fn encode(&mut self, item: TFrame, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let len = item.size() as u16 + FRAME_HEADER_LENGTH;
@@ -81,7 +81,7 @@ impl Encoder<TFrame> for TFrameCodec {
 
 impl Decoder for TFrameCodec {
     type Item = TFrame;
-    type Error = Error;
+    type Error = crate::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let frame_type = num::FromPrimitive::from_u8(src.get_u8()).unwrap(); // if not?

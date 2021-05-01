@@ -5,6 +5,7 @@ use crate::Error;
 use crate::TChannelError::FrameParsingError;
 use bytes::BytesMut;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::future::Future;
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -25,6 +26,14 @@ impl TryFrom<TFrame> for RawMessage {
     type Error = TChannelError;
 
     fn try_from(value: TFrame) -> Result<Self, Self::Error> {
+        todo!()
+    }
+}
+
+impl TryInto<TFrame> for RawMessage {
+    type Error = TChannelError;
+
+    fn try_into(self) -> Result<TFrame, Self::Error> {
         todo!()
     }
 }
