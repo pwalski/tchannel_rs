@@ -1,5 +1,6 @@
 mod payloads;
 
+use crate::TChannelError;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -81,14 +82,20 @@ impl Encoder<TFrame> for TFrameCodec {
 
 impl Decoder for TFrameCodec {
     type Item = TFrame;
-    type Error = crate::Error;
+    type Error = crate::TChannelError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let frame_type = num::FromPrimitive::from_u8(src.get_u8()).unwrap(); // if not?
+        let size = src.get_u16();
+        if (size < FRAME_HEADER_LENGTH) {
+            return Err(TChannelError::FrameCodecError(
+                "Frame too short".to_string(),
+            ));
+        }
+        let frame_type = num::FromPrimitive::from_u8(src.get_u8()).unwrap();
         src.advance(1); // skip
         let id = src.get_u32();
         src.advance(8);
-        let payload = Bytes::from(src.split());
+        let payload = src.split_to((size - FRAME_HEADER_LENGTH) as usize).freeze();
         let frame = TFrame {
             id: id,
             frame_type: frame_type,

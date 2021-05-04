@@ -1,10 +1,18 @@
+use crate::TChannelError;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::fmt::Write;
 
 const PROTOCOL_VERSION: u16 = 2;
+const TRACING_HEADER_LENGTH: u8 = 25;
 
-#[derive(Copy, Clone, Debug, FromPrimitive)]
+pub trait Codec: Sized {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError>;
+    fn decode(src: &mut Bytes) -> Result<Self, String>;
+}
+
+#[derive(Copy, Clone, Debug, FromPrimitive, PartialEq, ToPrimitive)]
 pub enum ChecksumType {
     None = 0x00,
     // crc-32 (adler-32)
@@ -15,13 +23,13 @@ pub enum ChecksumType {
     Crc32C = 0x03,
 }
 
-#[derive(Copy, Clone, Debug, FromPrimitive)]
+#[derive(Copy, Clone, Debug, FromPrimitive, ToPrimitive)]
 pub enum ResponseCode {
     Ok = 0x00,
     Error = 0x01,
 }
 
-#[derive(Copy, Clone, Debug, FromPrimitive)]
+#[derive(Copy, Clone, Debug, FromPrimitive, ToPrimitive)]
 pub enum ErrorCode {
     // Not a valid value for code. Do not use.
     Invalid = 0x00,
@@ -54,15 +62,49 @@ bitflags! {
 
 bitflags! {
     pub struct TraceFlags: u8 {
+        const NONE = 0x00;
         const ENABLED = 0x01;
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+impl Codec for TraceFlags {
+    fn encode(mut self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+        dst.put_u8(self.bits());
+        Ok(()) // TODO?
+    }
+
+    fn decode(src: &mut Bytes) -> Result<Self, String> {
+        let flag = src.get_u8();
+        TraceFlags::from_bits(flag).ok_or(format!("Unknown trace flag: {}", flag))
+    }
+}
+
+#[derive(Copy, Clone, Debug, Builder)]
+#[builder(pattern = "owned")]
 pub struct Tracing {
-    spanId: i64,
-    parentId: i64,
-    traceId: i64,
+    span_id: u64,
+    parent_id: u64,
+    trace_id: u64,
+    trace_flags: TraceFlags,
+}
+
+impl Codec for Tracing {
+    fn encode(mut self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+        dst.put_u64(self.span_id);
+        dst.put_u64(self.parent_id);
+        dst.put_u64(self.trace_id);
+        dst.put_u8(self.trace_flags.bits());
+        Ok(()) // TODO Ok?
+    }
+
+    fn decode(src: &mut Bytes) -> Result<Self, String> {
+        TracingBuilder::default()
+            .span_id(src.get_u64())
+            .parent_id(src.get_u64())
+            .trace_id(src.get_u64())
+            .trace_flags(TraceFlags::decode(src)?)
+            .build()
+    }
 }
 
 pub struct Init {
@@ -70,6 +112,8 @@ pub struct Init {
     headers: HashMap<String, String>,
 }
 
+#[derive(Clone, Debug, Builder)]
+#[builder(pattern = "owned")]
 struct CallCommonFields {
     // nh:1 (hk~1, hv~1){nh}
     headers: HashMap<String, String>,
@@ -79,6 +123,25 @@ struct CallCommonFields {
     checksum: Option<u32>,
     // arg1~2 arg2~2 arg3~2
     payload: Bytes,
+}
+
+impl Codec for CallCommonFields {
+    fn encode(mut self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+        encode_headers(&self.headers, dst)?;
+        dst.put_u8(self.checksum_type as u8);
+        encode_checksum(self.checksum_type, self.checksum, dst)?;
+        dst.put(self.payload);
+        Ok(())
+    }
+
+    fn decode(src: &mut Bytes) -> Result<Self, String> {
+        /*
+        CallCommonFieldsBuilder::default()
+            .headers(decode_headers(src)?)
+            .checksum_type(...)
+            */
+        unimplemented!()
+    }
 }
 
 struct CallRequest {
@@ -137,7 +200,51 @@ pub struct Error {
     message: String,
 }
 
-fn encode_string(value: &String, bytes: &mut BytesMut) {
-    bytes.put_u16(value.len() as u16);
-    bytes.write_str(value).unwrap(); //todo handle Result
+fn encode_headers(
+    headers: &HashMap<String, String>,
+    dst: &mut BytesMut,
+) -> Result<(), TChannelError> {
+    dst.put_u16(headers.len() as u16);
+    for (headerKey, headerValue) in headers {
+        encode_string(headerKey, dst)?;
+        encode_string(headerValue, dst)?;
+    }
+    Ok(())
+}
+
+fn decode_headers(src: &mut Bytes) -> Result<HashMap<String, String>, TChannelError> {
+    let len = src.get_u16();
+    let mut headers = HashMap::new();
+    for _ in 0..len {
+        let key = decode_string(src)?;
+        let val = decode_string(src)?;
+        headers.insert(key, val);
+    }
+    Ok(headers)
+}
+
+fn encode_string(value: &String, dst: &mut BytesMut) -> Result<(), TChannelError> {
+    dst.put_u16(value.len() as u16);
+    dst.write_str(value)?;
+    Ok(())
+}
+
+fn decode_string(src: &mut Bytes) -> Result<String, TChannelError> {
+    let len = src.get_u16();
+    let bytes = src.copy_to_bytes(len as usize);
+    Ok(String::from_utf8(bytes.chunk().to_vec())?)
+}
+
+fn encode_checksum(
+    checksum_type: ChecksumType,
+    value: Option<u32>,
+    dst: &mut BytesMut,
+) -> Result<(), TChannelError> {
+    dst.put_u8(checksum_type as u8);
+    if checksum_type != ChecksumType::None {
+        dst.put_u32(value.ok_or(TChannelError::FrameCodecError(
+            "Missing checksum value.".to_string(),
+        ))?)
+    }
+    Ok(())
 }

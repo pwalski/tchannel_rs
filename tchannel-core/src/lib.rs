@@ -17,6 +17,7 @@ pub mod connection;
 pub mod frame;
 pub mod handlers;
 
+use std::string::FromUtf8Error;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -33,8 +34,14 @@ pub enum TChannelError {
     #[error(transparent)]
     IOError(#[from] std::io::Error),
 
-    #[error("Frame parsing error: {0}")]
-    FrameParsingError(String),
+    #[error("Frame codec error: {0}")]
+    FrameCodecError(String),
+
+    #[error("Formatting error")]
+    FormattingError(#[from] core::fmt::Error),
+
+    #[error("String decoding error")]
+    StringDecodingError(#[from] FromUtf8Error),
 }
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;

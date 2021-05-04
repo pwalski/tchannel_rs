@@ -2,7 +2,7 @@ use crate::channel::frames::TFrame;
 use crate::channel::messages::*;
 use crate::channel::{FrameStream, SubChannel};
 use crate::Error;
-use crate::TChannelError::FrameParsingError;
+use crate::TChannelError::FrameCodecError;
 use bytes::BytesMut;
 use std::collections::HashMap;
 use std::convert::TryInto;
