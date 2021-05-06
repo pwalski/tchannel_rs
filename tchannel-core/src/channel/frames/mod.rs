@@ -63,7 +63,7 @@ impl TFrame {
 pub struct TFrameCodec {}
 
 impl Encoder<TFrame> for TFrameCodec {
-    type Error = crate::Error;
+    type Error = crate::TChannelError;
 
     fn encode(&mut self, item: TFrame, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let len = item.size() as u16 + FRAME_HEADER_LENGTH;

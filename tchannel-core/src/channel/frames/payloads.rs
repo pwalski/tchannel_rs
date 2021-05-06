@@ -1,15 +1,17 @@
 use crate::TChannelError;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use num_traits::FromPrimitive;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::Write;
+use std::string::FromUtf8Error;
 
 const PROTOCOL_VERSION: u16 = 2;
 const TRACING_HEADER_LENGTH: u8 = 25;
 
 pub trait Codec: Sized {
     fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError>;
-    fn decode(src: &mut Bytes) -> Result<Self, String>;
+    fn decode(src: &mut Bytes) -> Result<Self, TChannelError>;
 }
 
 #[derive(Copy, Clone, Debug, FromPrimitive, PartialEq, ToPrimitive)]
@@ -73,9 +75,12 @@ impl Codec for TraceFlags {
         Ok(()) // TODO?
     }
 
-    fn decode(src: &mut Bytes) -> Result<Self, String> {
+    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
         let flag = src.get_u8();
-        TraceFlags::from_bits(flag).ok_or(format!("Unknown trace flag: {}", flag))
+        TraceFlags::from_bits(flag).ok_or(TChannelError::FrameCodecError(format!(
+            "Unknown trace flag: {}",
+            flag
+        )))
     }
 }
 
@@ -97,13 +102,13 @@ impl Codec for Tracing {
         Ok(()) // TODO Ok?
     }
 
-    fn decode(src: &mut Bytes) -> Result<Self, String> {
-        TracingBuilder::default()
+    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+        Ok(TracingBuilder::default()
             .span_id(src.get_u64())
             .parent_id(src.get_u64())
             .trace_id(src.get_u64())
             .trace_flags(TraceFlags::decode(src)?)
-            .build()
+            .build()?)
     }
 }
 
@@ -134,13 +139,15 @@ impl Codec for CallCommonFields {
         Ok(())
     }
 
-    fn decode(src: &mut Bytes) -> Result<Self, String> {
-        /*
-        CallCommonFieldsBuilder::default()
-            .headers(decode_headers(src)?)
-            .checksum_type(...)
-            */
-        unimplemented!()
+    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+        let headers = decode_headers(src)?;
+        let mut builder = CallCommonFieldsBuilder::default().headers(headers);
+        let (checksum_type, checksum) = decode_checksum(src)?;
+        Ok(builder
+            .checksum_type(checksum_type)
+            .checksum(checksum)
+            .payload(src.split_off(src.len() - src.remaining()))
+            .build()?)
     }
 }
 
@@ -212,7 +219,7 @@ fn encode_headers(
     Ok(())
 }
 
-fn decode_headers(src: &mut Bytes) -> Result<HashMap<String, String>, TChannelError> {
+fn decode_headers(src: &mut Bytes) -> Result<HashMap<String, String>, FromUtf8Error> {
     let len = src.get_u16();
     let mut headers = HashMap::new();
     for _ in 0..len {
@@ -229,10 +236,10 @@ fn encode_string(value: &String, dst: &mut BytesMut) -> Result<(), TChannelError
     Ok(())
 }
 
-fn decode_string(src: &mut Bytes) -> Result<String, TChannelError> {
+fn decode_string(src: &mut Bytes) -> Result<String, FromUtf8Error> {
     let len = src.get_u16();
     let bytes = src.copy_to_bytes(len as usize);
-    Ok(String::from_utf8(bytes.chunk().to_vec())?)
+    String::from_utf8(bytes.chunk().to_vec())
 }
 
 fn encode_checksum(
@@ -247,4 +254,15 @@ fn encode_checksum(
         ))?)
     }
     Ok(())
+}
+
+fn decode_checksum(src: &mut Bytes) -> Result<(ChecksumType, Option<u32>), TChannelError> {
+    let checksum_byte = src.get_u8();
+    let checksum_type = ChecksumType::from_u8(checksum_byte).ok_or_else(|| {
+        TChannelError::FrameCodecError(format!("Unknown checksum type: {}", checksum_byte))
+    })?;
+    match checksum_type {
+        ChecksumType::None => Ok((ChecksumType::None, None)),
+        checksum => Ok((checksum, Some(src.get_u32()))),
+    }
 }

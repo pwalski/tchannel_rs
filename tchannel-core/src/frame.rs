@@ -68,7 +68,7 @@ pub enum Error {
     Incomplete,
 
     /// Invalid message encoding
-    Other(crate::Error),
+    Other(crate::TChannelError),
 }
 
 impl Frame {

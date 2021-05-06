@@ -17,6 +17,7 @@ pub mod connection;
 pub mod frame;
 pub mod handlers;
 
+use crate::TChannelError::FrameCodecError;
 use std::string::FromUtf8Error;
 use thiserror::Error;
 
@@ -42,6 +43,12 @@ pub enum TChannelError {
 
     #[error("String decoding error")]
     StringDecodingError(#[from] FromUtf8Error),
+}
+
+impl From<String> for TChannelError {
+    fn from(err: String) -> Self {
+        FrameCodecError(err)
+    }
 }
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;

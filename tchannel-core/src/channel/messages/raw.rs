@@ -54,7 +54,7 @@ impl MessageChannel for SubChannel {
 }
 
 impl Encoder<RawMessage> for MessageCodec {
-    type Error = Error;
+    type Error = TChannelError;
 
     fn encode(&mut self, item: RawMessage, dst: &mut BytesMut) -> Result<(), Self::Error> {
         todo!()
@@ -63,7 +63,7 @@ impl Encoder<RawMessage> for MessageCodec {
 
 impl Decoder for MessageCodec {
     type Item = RawMessage;
-    type Error = Error;
+    type Error = TChannelError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         todo!()
