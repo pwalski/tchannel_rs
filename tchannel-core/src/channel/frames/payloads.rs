@@ -57,6 +57,7 @@ pub enum ErrorCode {
 
 bitflags! {
     pub struct Flags: u8 {
+        const NONE = 0x00; //TODO bit useless
         const MORE_FRAGMENTS_FOLLOW = 0x01;
         const IS_REQUEST_STREAMING = 0x02;
     }
@@ -64,27 +65,12 @@ bitflags! {
 
 bitflags! {
     pub struct TraceFlags: u8 {
-        const NONE = 0x00;
+        const NONE = 0x00; //TODO bit useless
         const ENABLED = 0x01;
     }
 }
 
-impl Codec for TraceFlags {
-    fn encode(mut self, dst: &mut BytesMut) -> Result<(), TChannelError> {
-        dst.put_u8(self.bits());
-        Ok(()) // TODO?
-    }
-
-    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
-        let flag = src.get_u8();
-        TraceFlags::from_bits(flag).ok_or(TChannelError::FrameCodecError(format!(
-            "Unknown trace flag: {}",
-            flag
-        )))
-    }
-}
-
-#[derive(Copy, Clone, Debug, Builder)]
+#[derive(Debug, Builder)]
 #[builder(pattern = "owned")]
 pub struct Tracing {
     span_id: u64,
@@ -107,19 +93,46 @@ impl Codec for Tracing {
             .span_id(src.get_u64())
             .parent_id(src.get_u64())
             .trace_id(src.get_u64())
-            .trace_flags(TraceFlags::decode(src)?)
+            .trace_flags(decode_bitflag(src.get_u8(), TraceFlags::from_bits)?)
             .build()?)
     }
 }
 
+#[derive(Debug, Builder)]
+#[builder(pattern = "owned", build_fn(validate = "Self::validate"))]
 pub struct Init {
+    #[builder(default = "2")] //TODO implementation using PROTOCOL_VERSION would be too verbose
     version: u16,
     headers: HashMap<String, String>,
 }
 
-#[derive(Clone, Debug, Builder)]
+impl InitBuilder {
+    fn validate(&self) -> Result<(), String> {
+        match self.version {
+            Some(PROTOCOL_VERSION) => Ok(()),
+            _ => Err(String::from("Unsupported protocol version")),
+        }
+    }
+}
+
+impl Codec for Init {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+        dst.put_u16(self.version);
+        encode_headers(self.headers, dst)?;
+        Ok(())
+    }
+
+    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+        Ok(InitBuilder::default()
+            .version(src.get_u16())
+            .headers(decode_headers(src)?)
+            .build()?)
+    }
+}
+
+#[derive(Debug, Builder)]
 #[builder(pattern = "owned")]
-struct CallCommonFields {
+pub struct CallCommonFields {
     // nh:1 (hk~1, hv~1){nh}
     headers: HashMap<String, String>,
     // csumtype:1
@@ -132,7 +145,7 @@ struct CallCommonFields {
 
 impl Codec for CallCommonFields {
     fn encode(mut self, dst: &mut BytesMut) -> Result<(), TChannelError> {
-        encode_headers(&self.headers, dst)?;
+        encode_headers(self.headers, dst)?;
         dst.put_u8(self.checksum_type as u8);
         encode_checksum(self.checksum_type, self.checksum, dst)?;
         dst.put(self.payload);
@@ -151,6 +164,8 @@ impl Codec for CallCommonFields {
     }
 }
 
+#[derive(Debug, Builder)]
+#[builder(pattern = "owned")]
 struct CallRequest {
     // flags:1
     flags: Flags,
@@ -164,6 +179,29 @@ struct CallRequest {
     fields: CallCommonFields,
 }
 
+impl Codec for CallRequest {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+        dst.put_u8(self.flags.bits());
+        dst.put_u32(self.ttl);
+        self.tracing.encode(dst)?;
+        encode_string(self.service, dst)?;
+        self.fields.encode(dst)?;
+        Ok(())
+    }
+
+    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+        Ok(CallRequestBuilder::default()
+            .flags(decode_bitflag(src.get_u8(), Flags::from_bits)?)
+            .ttl(src.get_u32())
+            .tracing(Tracing::decode(src)?)
+            .service(decode_string(src)?)
+            .fields(CallCommonFields::decode(src)?)
+            .build()?)
+    }
+}
+
+#[derive(Debug, Builder)]
+#[builder(pattern = "owned")]
 struct CallResponse {
     // flags:1
     flags: Flags,
@@ -175,6 +213,27 @@ struct CallResponse {
     fields: CallCommonFields,
 }
 
+impl Codec for CallResponse {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+        dst.put_u8(self.flags.bits());
+        dst.put_u8(self.code as u8);
+        self.tracing.encode(dst)?;
+        self.fields.encode(dst)?;
+        Ok(())
+    }
+
+    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+        Ok(CallResponseBuilder::default()
+            .flags(decode_bitflag(src.get_u8(), Flags::from_bits)?)
+            .code(decode_bitflag(src.get_u8(), ResponseCode::from_u8)?)
+            .tracing(Tracing::decode(src)?)
+            .fields(CallCommonFields::decode(src)?)
+            .build()?)
+    }
+}
+
+#[derive(Debug, Builder)]
+#[builder(pattern = "owned")]
 pub struct CallContinue {
     // flags:1
     flags: Flags,
@@ -182,6 +241,23 @@ pub struct CallContinue {
     fields: CallCommonFields,
 }
 
+impl Codec for CallContinue {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+        dst.put_u8(self.flags.bits());
+        self.fields.encode(dst)?;
+        Ok(())
+    }
+
+    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+        Ok(CallContinueBuilder::default()
+            .flags(decode_bitflag(src.get_u8(), Flags::from_bits)?)
+            .fields(CallCommonFields::decode(src)?)
+            .build()?)
+    }
+}
+
+#[derive(Debug, Builder)]
+#[builder(pattern = "owned")]
 pub struct Cancel {
     // ttl:4
     ttl: u32,
@@ -190,6 +266,25 @@ pub struct Cancel {
     why: String,
 }
 
+impl Codec for Cancel {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+        dst.put_u32(self.ttl);
+        self.tracing.encode(dst)?;
+        encode_string(self.why, dst)?;
+        Ok(())
+    }
+
+    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+        Ok(CancelBuilder::default()
+            .ttl(src.get_u32())
+            .tracing(Tracing::decode(src)?)
+            .why(decode_string(src)?)
+            .build()?)
+    }
+}
+
+#[derive(Debug, Builder)]
+#[builder(pattern = "owned")]
 pub struct Claim {
     // ttl:4
     ttl: u32,
@@ -197,18 +292,52 @@ pub struct Claim {
     tracing: Tracing,
 }
 
+impl Codec for Claim {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+        dst.put_u32(self.ttl);
+        self.tracing.encode(dst)?;
+        Ok(())
+    }
+
+    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+        Ok(ClaimBuilder::default()
+            .ttl(src.get_u32())
+            .tracing(Tracing::decode(src)?)
+            .build()?)
+    }
+}
+
 // pub struct PingRequest {}
 
 // pub struct PingResponse {}
 
+#[derive(Debug, Builder)]
+#[builder(pattern = "owned")]
 pub struct Error {
     code: ErrorCode,
     tracing: Tracing,
     message: String,
 }
 
+impl Codec for Error {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+        dst.put_u8(self.code as u8);
+        self.tracing.encode(dst)?;
+        encode_string(self.message, dst)?;
+        Ok(())
+    }
+
+    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+        Ok(ErrorBuilder::default()
+            .code(decode_bitflag(src.get_u8(), ErrorCode::from_u8)?)
+            .tracing(Tracing::decode(src)?)
+            .message(decode_string(src)?)
+            .build()?)
+    }
+}
+
 fn encode_headers(
-    headers: &HashMap<String, String>,
+    headers: HashMap<String, String>,
     dst: &mut BytesMut,
 ) -> Result<(), TChannelError> {
     dst.put_u16(headers.len() as u16);
@@ -230,9 +359,9 @@ fn decode_headers(src: &mut Bytes) -> Result<HashMap<String, String>, FromUtf8Er
     Ok(headers)
 }
 
-fn encode_string(value: &String, dst: &mut BytesMut) -> Result<(), TChannelError> {
+fn encode_string(value: String, dst: &mut BytesMut) -> Result<(), TChannelError> {
     dst.put_u16(value.len() as u16);
-    dst.write_str(value)?;
+    dst.write_str(value.as_str())?;
     Ok(())
 }
 
@@ -257,12 +386,13 @@ fn encode_checksum(
 }
 
 fn decode_checksum(src: &mut Bytes) -> Result<(ChecksumType, Option<u32>), TChannelError> {
-    let checksum_byte = src.get_u8();
-    let checksum_type = ChecksumType::from_u8(checksum_byte).ok_or_else(|| {
-        TChannelError::FrameCodecError(format!("Unknown checksum type: {}", checksum_byte))
-    })?;
+    let checksum_type = decode_bitflag(src.get_u8(), ChecksumType::from_u8)?;
     match checksum_type {
         ChecksumType::None => Ok((ChecksumType::None, None)),
         checksum => Ok((checksum, Some(src.get_u32()))),
     }
+}
+
+fn decode_bitflag<T, F: Fn(u8) -> Option<T>>(byte: u8, decoder: F) -> Result<T, TChannelError> {
+    decoder(byte).ok_or_else(|| TChannelError::FrameCodecError(format!("Unknown flag: {}", byte)))
 }
