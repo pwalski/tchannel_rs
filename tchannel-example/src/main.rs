@@ -1,12 +1,36 @@
+use bytes::{BufMut, BytesMut};
 use futures::SinkExt;
 use std::collections::HashMap;
-use tchannel::channel::frames::{TFrameCodec, Type};
+use tchannel::channel::frames::payloads::*;
+use tchannel::channel::frames::*;
+use tchannel::channel::frames::{TFrame, TFrameCodec, Type};
 use tchannel::channel::messages::TransportHeader;
-use tchannel::frame::InitFrame;
 use tchannel::Error;
 use tokio::net::TcpStream;
 use tokio_stream::StreamExt;
 use tokio_util::codec::Framed;
+
+// pub struct InitFrame {
+//     // pub because generics suc
+//     pub frame: TFrame,
+// }
+
+// impl InitFrame {
+//     const VERSION: u16 = 2;
+//
+//     pub fn new(id: u32, frame_type: Type, headers: HashMap<String, String>) -> Self {
+//         let mut bytes = BytesMut::new();
+//         bytes.put_u16(InitFrame::VERSION);
+//         encode_headers(&headers, &mut bytes);
+//         let frame = TFrameBuilder::default()
+//             .id(id)
+//             .frame_type(frame_type)
+//             .payload(bytes.freeze())
+//             .build()
+//             .unwrap(); //TODO
+//         return InitFrame { frame };
+//     }
+// }
 
 #[tokio::main]
 pub async fn main() -> Result<(), Error> {
@@ -16,7 +40,15 @@ pub async fn main() -> Result<(), Error> {
     transport_headers.insert(TransportHeader::CallerNameKey, "keyvalue-service");
 
     let headers: HashMap<String, String> = HashMap::new();
-    let init_frame = InitFrame::new(0, Type::InitRequest, headers);
+    let init_frame = InitBuilder::default().headers(headers).build()?;
+    let mut bytes = BytesMut::new();
+    let id = 1;
+    init_frame.encode(&mut bytes);
+    let frame = TFrameBuilder::default()
+        .id(1)
+        .frame_type(Type::InitRequest)
+        .payload(bytes.freeze())
+        .build()?;
 
     // let mut connection = connection().await; // ???
     // println!("writing frame");
@@ -36,7 +68,7 @@ pub async fn main() -> Result<(), Error> {
 
     let stream = connect().await.unwrap();
     let mut transport = Framed::new(stream, TFrameCodec::default());
-    let sent = transport.send(init_frame.frame).await;
+    let sent = transport.send(frame).await;
     println!("Sent: {:?}", sent);
 
     while let Some(request) = transport.next().await {

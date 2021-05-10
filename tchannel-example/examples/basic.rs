@@ -8,8 +8,8 @@ use tokio::net::lookup_host;
 
 #[tokio::main]
 pub async fn main() -> Result<(), Error> {
-    let mut tchannel = TChannelBuilder::default().build()?;
-    let subchannel = tchannel.make_subchannel("sub_channel")?;
+    let mut tchannel = TChannelFactory::default().make()?;
+    let subchannel = tchannel.subchannel(String::from("sub_channel")).await?;
     let requestBase = BaseRequestBuilder::default()
         .transport_headers(HashMap::new())
         .build()

@@ -1,4 +1,4 @@
-mod payloads;
+pub mod payloads;
 
 use crate::TChannelError;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
