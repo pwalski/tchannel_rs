@@ -620,6 +620,7 @@ dependencies = [
  "bitflags",
  "bytes",
  "derive_builder",
+ "futures",
  "getset",
  "num",
  "num-derive",
@@ -629,6 +630,7 @@ dependencies = [
  "thiserror",
  "thrift",
  "tokio",
+ "tokio-stream",
  "tokio-util",
 ]
 

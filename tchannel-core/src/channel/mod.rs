@@ -3,15 +3,15 @@ pub mod frames;
 pub mod messages;
 
 use crate::channel::connection::{ConnectionOptions, ConnectionPools, ConnectionPoolsBuilder};
-use crate::channel::frames::TFrame;
+use crate::channel::frames::{TFrame, TFrameBuilder, Type};
 use crate::channel::messages::{Message, MessageCodec, Request, Response};
 use crate::handlers::RequestHandler;
 use crate::{Error, TChannelError};
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio::net::ToSocketAddrs;
@@ -23,31 +23,22 @@ pub struct TChannel {
     connection_pools: Arc<ConnectionPools>,
 }
 
-#[derive(Getters, Setters, Default)]
-pub struct TChannelFactory {
-    #[set = "pub"]
-    connection_options: ConnectionOptions,
-}
-
-impl TChannelFactory {
-    pub fn make(self) -> ::std::result::Result<TChannel, String> {
+impl TChannel {
+    pub fn new(connection_options: ConnectionOptions) -> Result<Self, TChannelError> {
         let connection_pools = ConnectionPoolsBuilder::default()
-            .connection_options(self.connection_options)
+            .connection_options(connection_options)
             .build()?;
         Ok(TChannel {
             subchannels: RwLock::new(HashMap::new()),
             connection_pools: Arc::new(connection_pools),
         })
     }
-}
 
-impl TChannel {
     pub async fn subchannel(&mut self, service_name: String) -> Result<Arc<SubChannel>, String> {
-        let subchannels = self.subchannels.read().await;
-        match subchannels.get(&service_name) {
-            Some(subchannel) => Ok(subchannel.clone()),
-            None => self.make_subchannel(service_name).await,
+        if let Some(subchannel) = self.subchannels.read().await.get(&service_name) {
+            return Ok(subchannel.clone());
         }
+        self.make_subchannel(service_name).await
     }
 
     async fn make_subchannel(&self, service_name: String) -> Result<Arc<SubChannel>, String> {
@@ -68,13 +59,15 @@ impl TChannel {
     }
 }
 
-#[derive(Debug, Builder)]
+#[derive(Debug, Default, Builder)]
 #[builder(pattern = "owned")]
 pub struct SubChannel {
     service_name: String,
-    next_message_id: AtomicI32,
-    handlers: HashMap<String, Box<RequestHandler>>,
     connection_pools: Arc<ConnectionPools>,
+    #[builder(setter(skip))]
+    next_message_id: AtomicU32,
+    #[builder(setter(skip))]
+    handlers: HashMap<String, Box<RequestHandler>>,
 }
 
 impl SubChannel {
@@ -89,13 +82,15 @@ impl SubChannel {
         host: SocketAddr,
         port: u16,
     ) -> Result<RES, crate::TChannelError> {
-        let peer = self.connection_pools.get_or_add(host).await;
+        let pool = self.connection_pools.get_or_add(host).await?;
+        let connection = pool.get().await?;
         let messsage_id = self.next_message_id();
         // write to message stream
-        unimplemented!()
+        println!("unimplemented");
+        Err(TChannelError::from("unimplemented".to_string()))
     }
 
-    fn next_message_id(&self) -> i32 {
+    fn next_message_id(&self) -> u32 {
         self.next_message_id.fetch_add(1, Ordering::Relaxed)
     }
 }

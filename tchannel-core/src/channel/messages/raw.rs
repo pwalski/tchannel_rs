@@ -12,7 +12,6 @@ use tokio_util::codec::{Decoder, Encoder};
 #[derive(Default, Debug, Builder, Getters)]
 #[builder(pattern = "owned")]
 pub struct RawMessage {
-    id: String,
     base: BaseRequest,
 }
 

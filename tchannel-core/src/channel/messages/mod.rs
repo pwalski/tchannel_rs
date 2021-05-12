@@ -68,6 +68,7 @@ pub trait Response: Message + Debug {}
 pub struct BaseRequest {
     id: i32,
     value: String,
+    #[builder(default = "HashMap::new()")]
     transport_headers: HashMap<TransportHeader, String>,
 }
 
