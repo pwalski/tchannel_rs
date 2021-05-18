@@ -7,16 +7,21 @@ use async_trait::async_trait;
 use bb8::{ManageConnection, Pool, PooledConnection, RunError};
 use bytes::BytesMut;
 use core::time::Duration;
+use futures::stream::StreamExt;
 use futures::SinkExt;
 use std::collections::HashMap;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
 use tokio::net::ToSocketAddrs;
+use tokio::sync::mpsc;
+use tokio::sync::oneshot::{Receiver, Sender};
 use tokio::sync::RwLock;
-use tokio_stream::StreamExt;
-use tokio_util::codec::Framed;
+use tokio::sync::{oneshot, Mutex};
+use tokio_stream::wrappers::ReceiverStream;
+use tokio_util::codec::{FramedRead, FramedWrite};
 
 #[derive(Debug, Builder, Clone)]
 pub struct ConnectionOptions {
@@ -35,21 +40,61 @@ impl Default for ConnectionOptions {
     }
 }
 
+#[derive(Debug, Builder)]
+#[builder(pattern = "owned")]
+pub struct ConnectionsHandler {
+    connection_pools: Arc<ConnectionPools>,
+    #[builder(setter(skip))]
+    pending_ids: PendingIds,
+}
+
+impl ConnectionsHandler {
+    pub async fn get_or_add(
+        &self,
+        addr: SocketAddr,
+    ) -> Result<Arc<Pool<ConnectionManager>>, RunError<TChannelError>> {
+        // TODO dummy impl
+        self.connection_pools.get_or_add(addr).await
+    }
+
+    pub async fn send(&mut self, frame: TFrame, addr: SocketAddr) -> Result<TFrame, TChannelError> {
+        let pool = self.connection_pools.get_or_add(addr).await?;
+        let mut connection = pool.get().await?;
+        connection.frame_output.send(frame).await;
+        unimplemented!()
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct PendingIds {
+    channels: HashMap<u32, Sender<TFrame>>,
+}
+
+impl PendingIds {
+    pub fn add(&mut self, id: u32, channel: Sender<TFrame>) {
+        self.channels.insert(id, channel);
+    }
+
+    pub fn respond(&mut self, response: TFrame) -> Result<(), TFrame> {
+        if let Some(sender) = self.channels.remove(&response.id()) {
+            sender.send(response)
+        } else {
+            Err(response) //?
+        }
+    }
+}
+
 #[derive(Debug, Default, Builder)]
 #[builder(pattern = "owned")]
-#[builder(build_fn(name = "build_internal"))]
 pub struct ConnectionPools {
     connection_options: ConnectionOptions,
-    #[builder(field(private))]
+    #[builder(setter(skip))]
     pools: RwLock<HashMap<SocketAddr, Arc<Pool<ConnectionManager>>>>,
 }
 
-impl ConnectionPoolsBuilder {
-    pub fn build(self) -> ::std::result::Result<ConnectionPools, String> {
-        let pools = RwLock::new(HashMap::new());
-        self.pools(pools).build_internal()
-    }
-}
+// 1. create subchannel dedicated wrapper around connection pools
+// 2. store pending id-res_channel map there
+// 3. store there subchannel dedicated connection manager using id-resp_channel map to handle init handshake
 
 impl ConnectionPools {
     pub async fn get_or_add(
@@ -70,13 +115,13 @@ impl ConnectionPools {
         if let Some(pool) = pools.get(&addr) {
             return Ok(pool.clone());
         }
-        let client = ConnectionManager { addr };
+        let connection_manager = ConnectionManager { addr };
         let pool = Arc::new(
             Pool::builder()
                 .max_lifetime(self.connection_options.lifetime)
                 .max_size(self.connection_options.max_connections)
                 .test_on_check_out(self.connection_options.test_connection)
-                .build(client)
+                .build(connection_manager)
                 .await?,
         );
         pools.insert(addr, pool.clone());
@@ -84,15 +129,30 @@ impl ConnectionPools {
     }
 }
 
-type TFrameStream = Framed<TcpStream, TFrameCodec>;
-
 pub struct Connection {
-    pub(self) stream: TFrameStream,
+    frame_input: FramedRead<OwnedReadHalf, TFrameCodec>,
+    frame_output: FramedWrite<OwnedWriteHalf, TFrameCodec>,
+    sender: tokio::sync::mpsc::Sender<TFrame>,
 }
 
 impl Connection {
+    pub async fn new(addr: SocketAddr, buffer_size: usize) -> Result<Connection, TChannelError> {
+        let mut tcpStream = TcpStream::connect(addr).await?;
+        let (read, write) = tcpStream.into_split();
+        let mut frame_input = FramedRead::new(read, TFrameCodec {});
+        let mut frame_output = FramedWrite::new(write, TFrameCodec {});
+        let (sender, mut receiver) = mpsc::channel::<TFrame>(buffer_size);
+        let connection = Connection {
+            frame_input,
+            frame_output,
+            sender,
+        };
+        let receiver_stream = ReceiverStream::new(receiver);
+        unimplemented!()
+    }
+
     pub async fn send(&mut self, frame: TFrame) -> Result<(), TChannelError> {
-        self.stream.send(frame).await
+        self.frame_output.send(frame).await
     }
 }
 
@@ -106,9 +166,19 @@ impl bb8::ManageConnection for ConnectionManager {
     type Error = TChannelError;
 
     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
-        let tcpStream = TcpStream::connect(self.addr).await?;
-        let mut stream = Framed::new(tcpStream, TFrameCodec {});
+        let mut tcpStream = TcpStream::connect(self.addr).await?;
+        let (read, write) = tcpStream.into_split();
+        let mut frame_input = FramedRead::new(read, TFrameCodec {});
+        let mut frame_output = FramedWrite::new(write, TFrameCodec {});
+        /*
+        let (tx, mut rx) = oneshot::channel::<Result<TFrame, TChannelError>>();
+        match rx.await {
+            Ok(response) => println!("Got response {}", response.id()),
+            Err(err) => println!("Got error {}", err),
+        }
+        */
         // dummy implementation
+        /*
         let mut bytes = BytesMut::new();
         let init = InitBuilder::default().build()?;
         init.encode(&mut bytes);
@@ -132,8 +202,13 @@ impl bb8::ManageConnection for ConnectionManager {
                 Err(e) => return Err(e.into()),
             }
         }
+        */
         //
-        Ok(Connection { stream })
+        // Ok(Connection {
+        //     frame_input,
+        //     frame_output,
+        // })
+        unimplemented!()
     }
 
     async fn is_valid(&self, conn: &mut PooledConnection<'_, Self>) -> Result<(), Self::Error> {

@@ -42,6 +42,9 @@ pub enum TChannelError {
 
     #[error("String decoding error")]
     StringDecodingError(#[from] FromUtf8Error),
+
+    #[error("Timeout error")]
+    TimeoutError,
 }
 
 impl From<String> for TChannelError {

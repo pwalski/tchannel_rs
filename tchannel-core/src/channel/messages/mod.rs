@@ -74,8 +74,8 @@ pub struct BaseRequest {
 
 impl BaseRequestBuilder {
     pub fn build(mut self) -> ::std::result::Result<BaseRequest, String> {
-        let base_request = Self::set_default_headers(self.build_internal()?);
-        return Ok(base_request);
+        let base_request = self.build_internal()?;
+        Ok(Self::set_default_headers(base_request))
     }
 
     fn set_default_headers(mut base_request: BaseRequest) -> BaseRequest {

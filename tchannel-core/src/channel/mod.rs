@@ -2,12 +2,16 @@ pub mod connection;
 pub mod frames;
 pub mod messages;
 
-use crate::channel::connection::{ConnectionOptions, ConnectionPools, ConnectionPoolsBuilder};
+use crate::channel::connection::{
+    ConnectionOptions, ConnectionPools, ConnectionPoolsBuilder, ConnectionsHandler,
+    ConnectionsHandlerBuilder,
+};
 use crate::channel::frames::{TFrame, TFrameBuilder, Type};
 use crate::channel::messages::{Message, MessageCodec, Request, Response};
 use crate::handlers::RequestHandler;
 use crate::{Error, TChannelError};
 use bytes::{Bytes, BytesMut};
+use futures::channel::oneshot::Sender;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::net::SocketAddr;
@@ -34,22 +38,31 @@ impl TChannel {
         })
     }
 
-    pub async fn subchannel(&mut self, service_name: String) -> Result<Arc<SubChannel>, String> {
+    pub async fn subchannel(
+        &mut self,
+        service_name: String,
+    ) -> Result<Arc<SubChannel>, TChannelError> {
         if let Some(subchannel) = self.subchannels.read().await.get(&service_name) {
             return Ok(subchannel.clone());
         }
         self.make_subchannel(service_name).await
     }
 
-    async fn make_subchannel(&self, service_name: String) -> Result<Arc<SubChannel>, String> {
+    async fn make_subchannel(
+        &self,
+        service_name: String,
+    ) -> Result<Arc<SubChannel>, TChannelError> {
         let mut subchannels = self.subchannels.write().await;
         match subchannels.get(&service_name) {
             Some(subchannel) => Ok(subchannel.clone()),
             None => {
+                let connections_handler = ConnectionsHandlerBuilder::default()
+                    .connection_pools(self.connection_pools.clone())
+                    .build()?;
                 let subchannel = Arc::new(
                     SubChannelBuilder::default()
                         .service_name(service_name.to_string())
-                        .connection_pools(self.connection_pools.clone())
+                        .connections_handler(connections_handler)
                         .build()?,
                 );
                 subchannels.insert(service_name, subchannel.clone());
@@ -59,11 +72,11 @@ impl TChannel {
     }
 }
 
-#[derive(Debug, Default, Builder)]
+#[derive(Debug, Builder)]
 #[builder(pattern = "owned")]
 pub struct SubChannel {
     service_name: String,
-    connection_pools: Arc<ConnectionPools>,
+    connections_handler: ConnectionsHandler,
     #[builder(setter(skip))]
     next_message_id: AtomicU32,
     #[builder(setter(skip))]
@@ -82,8 +95,7 @@ impl SubChannel {
         host: SocketAddr,
         port: u16,
     ) -> Result<RES, crate::TChannelError> {
-        let pool = self.connection_pools.get_or_add(host).await?;
-        let connection = pool.get().await?;
+        let connection = self.connections_handler.get_or_add(host).await;
         let messsage_id = self.next_message_id();
         // write to message stream
         println!("unimplemented");
