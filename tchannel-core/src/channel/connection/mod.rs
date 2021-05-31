@@ -7,11 +7,16 @@ use async_trait::async_trait;
 use bb8::{ManageConnection, Pool, PooledConnection, RunError};
 use bytes::BytesMut;
 use core::time::Duration;
-use futures::stream::StreamExt;
-use futures::SinkExt;
+use futures::future;
+use futures::stream::{self, Chunks, Iter, StreamExt};
+use futures::{self, SinkExt, TryStreamExt};
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::future::Future;
 use std::net::SocketAddr;
+use std::process::Output;
+use std::rc::Rc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
@@ -44,8 +49,6 @@ impl Default for ConnectionOptions {
 #[builder(pattern = "owned")]
 pub struct ConnectionsHandler {
     connection_pools: Arc<ConnectionPools>,
-    #[builder(setter(skip))]
-    pending_ids: PendingIds,
 }
 
 impl ConnectionsHandler {
@@ -60,8 +63,7 @@ impl ConnectionsHandler {
     pub async fn send(&mut self, frame: TFrame, addr: SocketAddr) -> Result<TFrame, TChannelError> {
         let pool = self.connection_pools.get_or_add(addr).await?;
         let mut connection = pool.get().await?;
-        connection.frame_output.send(frame).await;
-        unimplemented!()
+        connection.send(frame).await
     }
 }
 
@@ -77,10 +79,9 @@ impl PendingIds {
 
     pub fn respond(&mut self, response: TFrame) -> Result<(), TFrame> {
         if let Some(sender) = self.channels.remove(&response.id()) {
-            sender.send(response)
-        } else {
-            Err(response) //?
+            sender.send(response)?
         }
+        Ok(()) //?????
     }
 }
 
@@ -91,10 +92,6 @@ pub struct ConnectionPools {
     #[builder(setter(skip))]
     pools: RwLock<HashMap<SocketAddr, Arc<Pool<ConnectionManager>>>>,
 }
-
-// 1. create subchannel dedicated wrapper around connection pools
-// 2. store pending id-res_channel map there
-// 3. store there subchannel dedicated connection manager using id-resp_channel map to handle init handshake
 
 impl ConnectionPools {
     pub async fn get_or_add(
@@ -129,30 +126,91 @@ impl ConnectionPools {
     }
 }
 
+#[derive(Debug, Builder)]
+#[builder(pattern = "owned")]
 pub struct Connection {
-    frame_input: FramedRead<OwnedReadHalf, TFrameCodec>,
-    frame_output: FramedWrite<OwnedWriteHalf, TFrameCodec>,
-    sender: tokio::sync::mpsc::Sender<TFrame>,
+    #[builder(setter(skip))]
+    next_message_id: AtomicU32,
+    #[builder(setter(skip))]
+    pending_ids: PendingIds,
+    output_sender: tokio::sync::mpsc::Sender<TFrame>,
+}
+
+struct FrameWriter {
+    framed_write: Arc<Mutex<FramedWrite<OwnedWriteHalf, TFrameCodec>>>,
+    buffer_size: usize,
+}
+
+impl FrameWriter {
+    pub fn spawn(
+        framed_write: FramedWrite<OwnedWriteHalf, TFrameCodec>,
+        frame_receiver: tokio::sync::mpsc::Receiver<TFrame>,
+        buffer_size: usize,
+    ) {
+        let framed_write = Arc::new(Mutex::new(framed_write));
+        let receiver_stream = ReceiverStream::new(frame_receiver);
+        tokio::spawn(async move {
+            FrameWriter {
+                framed_write,
+                buffer_size,
+            }
+            .run(receiver_stream)
+            .await
+        });
+    }
+
+    pub async fn run(&mut self, receiver_stream: ReceiverStream<TFrame>) {
+        receiver_stream
+            .chunks(self.buffer_size)
+            .for_each(|frames| self.send_frames(frames))
+            .await;
+    }
+
+    async fn send_frames(&self, frames: Vec<TFrame>) {
+        let mut framed_write = self.framed_write.lock().await;
+        for frame in frames {
+            if let Err(err) = framed_write.feed(frame).await {
+                println!("Frame writing error {}", err);
+                //TODO logging
+            }
+        }
+        if let Err(err) = framed_write.flush().await {
+            println!("Frame flushing error {}", err);
+            //TODO logging
+        }
+    }
 }
 
 impl Connection {
-    pub async fn new(addr: SocketAddr, buffer_size: usize) -> Result<Connection, TChannelError> {
-        let mut tcpStream = TcpStream::connect(addr).await?;
-        let (read, write) = tcpStream.into_split();
-        let mut frame_input = FramedRead::new(read, TFrameCodec {});
-        let mut frame_output = FramedWrite::new(write, TFrameCodec {});
-        let (sender, mut receiver) = mpsc::channel::<TFrame>(buffer_size);
-        let connection = Connection {
-            frame_input,
-            frame_output,
-            sender,
-        };
-        let receiver_stream = ReceiverStream::new(receiver);
-        unimplemented!()
+    pub fn next_message_id(&self) -> u32 {
+        self.next_message_id.fetch_add(1, Ordering::Relaxed)
     }
 
-    pub async fn send(&mut self, frame: TFrame) -> Result<(), TChannelError> {
-        self.frame_output.send(frame).await
+    pub async fn connect(
+        addr: SocketAddr,
+        buffer_size: usize,
+    ) -> Result<Connection, TChannelError> {
+        let mut tcpStream = TcpStream::connect(addr).await?;
+        let (read, write) = tcpStream.into_split();
+        let mut framed_read = FramedRead::new(read, TFrameCodec {});
+        let mut framed_write = FramedWrite::new(write, TFrameCodec {});
+        let (frame_sender, mut frame_receiver) = mpsc::channel::<TFrame>(buffer_size);
+        FrameWriter::spawn(framed_write, frame_receiver, buffer_size);
+        //TODO keep reference to shutdown it?
+        let mut connection = ConnectionBuilder::default()
+            .output_sender(frame_sender)
+            .build()?;
+        connection.start_input_handling(framed_read);
+        Ok(connection)
+    }
+
+    fn start_input_handling(&mut self, frame_input: FramedRead<OwnedReadHalf, TFrameCodec>) {}
+
+    pub async fn send(&mut self, frame: TFrame) -> Result<TFrame, TChannelError> {
+        let (tx, mut rx) = oneshot::channel::<TFrame>();
+        self.pending_ids.add(*frame.id(), tx);
+        self.output_sender.send(frame).await;
+        Ok(rx.await?)
     }
 }
 

@@ -78,8 +78,6 @@ pub struct SubChannel {
     service_name: String,
     connections_handler: ConnectionsHandler,
     #[builder(setter(skip))]
-    next_message_id: AtomicU32,
-    #[builder(setter(skip))]
     handlers: HashMap<String, Box<RequestHandler>>,
 }
 
@@ -95,14 +93,11 @@ impl SubChannel {
         host: SocketAddr,
         port: u16,
     ) -> Result<RES, crate::TChannelError> {
-        let connection = self.connections_handler.get_or_add(host).await;
-        let messsage_id = self.next_message_id();
-        // write to message stream
+        let pool = self.connections_handler.get_or_add(host).await?;
+        let connection = pool.get().await?;
+        let messsage_id = connection.next_message_id(); // stupid
+                                                        // write to message stream
         println!("unimplemented");
         Err(TChannelError::from("unimplemented".to_string()))
-    }
-
-    fn next_message_id(&self) -> u32 {
-        self.next_message_id.fetch_add(1, Ordering::Relaxed)
     }
 }

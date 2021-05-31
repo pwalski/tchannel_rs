@@ -19,6 +19,7 @@ use crate::TChannelError::{ConnectionError, FrameCodecError};
 use bb8::RunError;
 use std::string::FromUtf8Error;
 use thiserror::Error;
+use tokio::sync::oneshot::error::RecvError;
 
 #[derive(Error, Debug)]
 pub enum TChannelError {
@@ -45,6 +46,9 @@ pub enum TChannelError {
 
     #[error("Timeout error")]
     TimeoutError,
+
+    #[error("Receive error")]
+    ReceiveError(#[from] RecvError),
 }
 
 impl From<String> for TChannelError {

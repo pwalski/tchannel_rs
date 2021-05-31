@@ -6,4 +6,5 @@ target/
 tchannel-example/server/target/
 tchannel-example/server/.idea/
 tchannel-core/src/gen
+tchannel-core/pkg
 tchannel-example/server/src/server.iml
