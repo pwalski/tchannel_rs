@@ -15,7 +15,8 @@ extern crate bitflags;
 pub mod channel;
 pub mod handlers;
 
-use crate::TChannelError::{ConnectionError, FrameCodecError};
+use crate::channel::frames::TFrame;
+use crate::TChannelError::{ConnectionError, FrameCodecError, FrameError};
 use bb8::RunError;
 use std::string::FromUtf8Error;
 use thiserror::Error;
@@ -49,6 +50,9 @@ pub enum TChannelError {
 
     #[error("Receive error")]
     ReceiveError(#[from] RecvError),
+
+    #[error("Frame handling error")]
+    FrameError(TFrame),
 }
 
 impl From<String> for TChannelError {
@@ -60,6 +64,12 @@ impl From<String> for TChannelError {
 impl From<RunError<TChannelError>> for TChannelError {
     fn from(err: RunError<TChannelError>) -> Self {
         TChannelError::Error
+    }
+}
+
+impl From<TFrame> for TChannelError {
+    fn from(frame: TFrame) -> Self {
+        FrameError(frame)
     }
 }
 
