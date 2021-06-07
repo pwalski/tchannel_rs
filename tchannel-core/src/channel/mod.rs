@@ -2,16 +2,16 @@ pub mod connection;
 pub mod frames;
 pub mod messages;
 
-use crate::channel::connection::{
-    ConnectionOptions, ConnectionPools, ConnectionPoolsBuilder, ConnectionsHandler,
-    ConnectionsHandlerBuilder,
-};
+use crate::channel::connection::{ConnectionOptions, ConnectionPools, ConnectionPoolsBuilder};
+use crate::channel::frames::payloads::Codec;
+use crate::channel::frames::payloads::{Init, InitBuilder};
 use crate::channel::frames::{TFrame, TFrameBuilder, Type};
 use crate::channel::messages::{Message, MessageCodec, Request, Response};
 use crate::handlers::RequestHandler;
 use crate::{Error, TChannelError};
 use bytes::{Bytes, BytesMut};
 use futures::channel::oneshot::Sender;
+use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::net::SocketAddr;
@@ -56,13 +56,11 @@ impl TChannel {
         match subchannels.get(&service_name) {
             Some(subchannel) => Ok(subchannel.clone()),
             None => {
-                let connections_handler = ConnectionsHandlerBuilder::default()
-                    .connection_pools(self.connection_pools.clone())
-                    .build()?;
+                debug!("Creating subchannel {}", service_name);
                 let subchannel = Arc::new(
                     SubChannelBuilder::default()
                         .service_name(service_name.to_string())
-                        .connections_handler(connections_handler)
+                        .connection_pools(self.connection_pools.clone())
                         .build()?,
                 );
                 subchannels.insert(service_name, subchannel.clone());
@@ -76,7 +74,7 @@ impl TChannel {
 #[builder(pattern = "owned")]
 pub struct SubChannel {
     service_name: String,
-    connections_handler: ConnectionsHandler,
+    connection_pools: Arc<ConnectionPools>,
     #[builder(setter(skip))]
     handlers: HashMap<String, Box<RequestHandler>>,
 }
@@ -93,11 +91,38 @@ impl SubChannel {
         host: SocketAddr,
         port: u16,
     ) -> Result<RES, crate::TChannelError> {
-        let pool = self.connections_handler.get_or_add(host).await?;
+        let pool = self.connection_pools.get_or_create(host).await?;
         let connection = pool.get().await?;
+
+        // ///////////////////
+        // debug!("Building frame");
+        // let id = connection.next_message_id();
+        // let mut bytes = BytesMut::new();
+        // let init = InitBuilder::default().build()?;
+        // init.encode(&mut bytes);
+        // let mut frame = TFrameBuilder::default()
+        //     .id(id)
+        //     .frame_type(Type::InitRequest)
+        //     .payload(bytes.freeze())
+        //     .build()?;
+        // // let response = connection.send(frame).await?;
+        // use std::thread;
+        // use std::time::Duration;
+        // debug!("Sleeping");
+        // thread::sleep(Duration::from_millis(8000));
+        // debug!("Sending frame");
+        // match connection.send(frame).await {
+        //     Ok(response) => todo!("test"),
+        //     Err(err) => {
+        //         debug!("Err: {}", err);
+        //         return Err(err);
+        //     }
+        // }
+        // //////////
+
         let messsage_id = connection.next_message_id(); // stupid
                                                         // write to message stream
-        println!("unimplemented");
+        error!("unimplemented");
         Err(TChannelError::from("unimplemented".to_string()))
     }
 }

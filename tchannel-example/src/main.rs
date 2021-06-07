@@ -34,6 +34,7 @@ use tokio_util::codec::Framed;
 
 #[tokio::main]
 pub async fn main() -> Result<(), Error> {
+    env_logger::init();
     // let mut channel = TChannelBuilder::default().build().unwrap();
     // let sub_channel = channel.make_subchannel("keyvalue-service");
     let mut transport_headers = HashMap::new();

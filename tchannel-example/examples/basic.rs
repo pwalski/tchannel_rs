@@ -1,3 +1,4 @@
+use log::{debug, error};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -10,6 +11,15 @@ use tokio::net::lookup_host;
 
 #[tokio::main]
 pub async fn main() -> Result<(), Error> {
+    env_logger::init();
+    if let Err(err) = run().await {
+        error!("Failure: {:?}", err);
+        return Err(err);
+    }
+    Ok(())
+}
+
+async fn run() -> Result<(), Error> {
     let mut tchannel = TChannel::new(ConnectionOptions::default())?;
     let subchannel = tchannel.subchannel(String::from("sub_channel")).await?;
     let requestBase = BaseRequestBuilder::default()
@@ -19,10 +29,10 @@ pub async fn main() -> Result<(), Error> {
         .build()?;
     let request = RawMessageBuilder::default().base(requestBase).build()?;
     let addr = SocketAddr::from_str("192.168.50.172:8888")?;
-    println!("sending");
+    debug!("sending");
     match subchannel.send(request, addr, 8888).await {
-        Ok(response) => println!("Response: {:?}", response),
-        Err(error) => println!("Fail: {:?}", error),
+        Ok(response) => debug!("Response: {:?}", response),
+        Err(error) => debug!("Fail: {:?}", error),
     }
     Ok(())
 }

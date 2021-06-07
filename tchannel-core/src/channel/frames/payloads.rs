@@ -98,8 +98,8 @@ impl Codec for Tracing {
     }
 }
 
-#[derive(Debug, Builder)]
-#[builder(pattern = "owned", build_fn(validate = "Self::validate"))]
+#[derive(Debug, Default, Builder)]
+#[builder(default, pattern = "owned", build_fn(validate = "Self::validate"))]
 pub struct Init {
     #[builder(default = "2")] //TODO implementation using PROTOCOL_VERSION would be too verbose
     version: u16,
@@ -109,8 +109,8 @@ pub struct Init {
 impl InitBuilder {
     fn validate(&self) -> Result<(), String> {
         match self.version {
-            Some(PROTOCOL_VERSION) => Ok(()),
-            _ => Err(String::from("Unsupported protocol version")),
+            Some(PROTOCOL_VERSION) | None => Ok(()),
+            Some(version) => Err(format!("Unsupported version {}", version)),
         }
     }
 }
