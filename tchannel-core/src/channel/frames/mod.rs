@@ -46,8 +46,6 @@ pub enum Type {
 #[derive(Debug, Getters, Builder)]
 pub struct TFrame {
     #[get = "pub"]
-    id: u32,
-    #[get = "pub"]
     frame_type: Type,
     #[get = "pub"]
     payload: Bytes,
@@ -59,34 +57,47 @@ impl TFrame {
     }
 }
 
-#[derive(Default, Debug)]
-pub struct TFrameCodec {}
+#[derive(Debug, Getters, new)]
+pub struct TFrameId {
+    #[get = "pub"]
+    id: u32,
+    #[get = "pub"]
+    frame: TFrame,
+}
 
-impl Encoder<TFrame> for TFrameCodec {
+#[derive(Default, Debug)]
+pub struct TFrameIdCodec {}
+
+impl Encoder<TFrameId> for TFrameIdCodec {
     type Error = crate::TChannelError;
 
-    fn encode(&mut self, item: TFrame, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        let len = item.size() as u16 + FRAME_HEADER_LENGTH;
+    fn encode(&mut self, item: TFrameId, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        let frame = item.frame();
+        let len = frame.size() as u16 + FRAME_HEADER_LENGTH;
         dst.reserve(len as usize);
         dst.put_u16(len);
-        dst.put_u8(*item.frame_type() as u8);
+        dst.put_u8(*frame.frame_type() as u8);
         dst.put_u8(ZERO); // zero
         dst.put_u32(*item.id());
         for _ in 0..8 {
             dst.put_u8(ZERO)
         }
-        dst.put_slice(item.payload());
+        dst.put_slice(frame.payload());
         Ok(())
     }
 }
 
-impl Decoder for TFrameCodec {
-    type Item = TFrame;
+impl Decoder for TFrameIdCodec {
+    type Item = TFrameId;
     type Error = crate::TChannelError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        if src.is_empty() {
+            debug!("Empty bytes src");
+            return Ok(None);
+        }
         let size = src.get_u16();
-        if (size < FRAME_HEADER_LENGTH) {
+        if size < FRAME_HEADER_LENGTH {
             return Err(TChannelError::FrameCodecError(
                 "Frame too short".to_string(),
             ));
@@ -97,10 +108,9 @@ impl Decoder for TFrameCodec {
         src.advance(8);
         let payload = src.split_to((size - FRAME_HEADER_LENGTH) as usize).freeze();
         let frame = TFrame {
-            id: id,
             frame_type: frame_type,
             payload: payload,
         };
-        Ok(Some(frame))
+        Ok(Some(TFrameId { id, frame }))
     }
 }

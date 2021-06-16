@@ -46,9 +46,8 @@ impl MessageChannel for SubChannel {
         &self,
         request: Self::REQ,
         host: SocketAddr,
-        port: u16,
     ) -> Result<Self::RES, crate::TChannelError> {
-        self.send(request, host, port).await
+        self.send(request, host).await
     }
 }
 

@@ -1,7 +1,7 @@
 use crate::channel::frames::payloads::Codec;
 use crate::channel::frames::payloads::Init;
 use crate::channel::frames::payloads::InitBuilder;
-use crate::channel::frames::{TFrame, TFrameBuilder, TFrameCodec, Type};
+use crate::channel::frames::{TFrame, TFrameBuilder, TFrameId, TFrameIdCodec, Type};
 use crate::TChannelError;
 use async_trait::async_trait;
 use bb8::{ErrorSink, ManageConnection, Pool, PooledConnection, RunError};
@@ -18,15 +18,19 @@ use std::error::Error;
 use std::fmt::Debug;
 use std::future::Future;
 use std::net::SocketAddr;
+use std::ops::Deref;
+use std::pin::Pin;
 use std::process::Output;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
 use tokio::net::ToSocketAddrs;
 use tokio::sync::mpsc;
-use tokio::sync::oneshot::{Receiver, Sender};
+use tokio::sync::mpsc::error::SendError;
+use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::RwLock;
 use tokio::sync::{oneshot, Mutex};
 use tokio::task::JoinHandle;
@@ -54,26 +58,26 @@ impl Default for ConnectionOptions {
 
 #[derive(Default, Debug)]
 pub struct PendingIds {
-    channels: Mutex<HashMap<u32, Sender<TFrame>>>,
+    channels: RwLock<HashMap<u32, Sender<TFrameId>>>,
 }
 
 impl PendingIds {
-    pub async fn add(&self, id: u32, sender: Sender<TFrame>) {
-        let mut channels = self.channels.lock().await;
+    pub async fn add(&self, id: u32, sender: Sender<TFrameId>) {
+        let mut channels = self.channels.write().await;
         channels.insert(id, sender);
     }
 
-    pub async fn respond(&self, response: TFrame) -> Result<(), TChannelError> {
+    pub async fn respond(&self, response: TFrameId) -> Result<(), TChannelError> {
         let id = response.id().clone();
-        if let Some(sender) = self.remove(&id).await {
-            return Ok(sender.send(response)?);
+        let mut channels = self.channels.read().await;
+        if let Some(sender) = channels.get(&id) {
+            return Ok(sender.send(response).await?);
         }
         Err(TChannelError::from(format!("Id {} not found", id)))
     }
 
-    async fn remove(&self, id: &u32) -> Option<Sender<TFrame>> {
-        let mut channels = self.channels.lock().await;
-        debug!("Channels len {}", channels.len()); //TODO remove
+    pub async fn remove(&self, id: &u32) -> Option<Sender<TFrameId>> {
+        let mut channels = self.channels.write().await;
         channels.remove(id)
     }
 }
@@ -147,14 +151,10 @@ pub struct Connection {
     next_message_id: AtomicU32,
     #[builder(setter(skip))]
     pending_ids: Arc<PendingIds>,
-    sender: tokio::sync::mpsc::Sender<TFrame>,
+    sender: tokio::sync::mpsc::Sender<TFrameId>,
 }
 
 impl Connection {
-    pub fn next_message_id(&self) -> u32 {
-        self.next_message_id.fetch_add(1, Ordering::Relaxed)
-    }
-
     pub async fn connect(
         addr: SocketAddr,
         buffer_size: usize,
@@ -162,34 +162,75 @@ impl Connection {
         debug!("Connecting to {}", addr);
         let mut tcpStream = TcpStream::connect(addr).await?;
         let (read, write) = tcpStream.into_split();
-        let mut framed_read = FramedRead::new(read, TFrameCodec {});
-        let mut framed_write = FramedWrite::new(write, TFrameCodec {});
-        let (sender, receiver) = mpsc::channel::<TFrame>(buffer_size);
+        let mut framed_read = FramedRead::new(read, TFrameIdCodec {});
+        let mut framed_write = FramedWrite::new(write, TFrameIdCodec {});
+        let (sender, receiver) = mpsc::channel::<TFrameId>(buffer_size);
         let mut connection = ConnectionBuilder::default().sender(sender).build()?;
         FrameReceiver::spawn(framed_read, connection.pending_ids.clone());
         FrameSender::spawn(framed_write, receiver, buffer_size);
         Ok(connection)
     }
 
-    pub async fn send(&self, frame: TFrame) -> Result<TFrame, TChannelError> {
-        debug!("Sending frame (id {})", frame.id());
-        let (tx, mut rx) = oneshot::channel::<TFrame>();
-        self.pending_ids.add(frame.id().clone(), tx).await;
-        self.sender.send(frame).await;
-        debug!("Waiting for response");
-        Ok(rx.await?)
+    pub async fn send_one(&self, frame: TFrame) -> Result<TFrameId, TChannelError> {
+        let (frame_output, mut frame_receiver) = self.send().await;
+        frame_output.send(frame).await?;
+        let response = frame_receiver.recv().await;
+        frame_output.close().await;
+        response.ok_or_else(|| TChannelError::Error) //TODO use proper error
+    }
+
+    //TODO better name? pass output as an fn arg?
+    pub async fn send_many(&self) -> (FrameOutput, FrameInput) {
+        let (frame_output, mut frame_receiver) = self.send().await;
+        let receiver_stream = ReceiverStream::new(frame_receiver);
+        (frame_output, receiver_stream)
+    }
+
+    async fn send(&self) -> (FrameOutput, Receiver<TFrameId>) {
+        let message_id = self.next_message_id();
+        let (sender, mut receiver) = mpsc::channel::<TFrameId>(10); //TODO connfigure
+        self.pending_ids.add(message_id.clone(), sender).await;
+        let frame_output =
+            FrameOutput::new(message_id, self.sender.clone(), self.pending_ids.clone());
+        (frame_output, receiver)
+    }
+
+    fn next_message_id(&self) -> u32 {
+        self.next_message_id.fetch_add(1, Ordering::Relaxed)
+    }
+}
+
+type FrameInput = ReceiverStream<TFrameId>;
+
+#[derive(Getters, new)]
+struct FrameOutput {
+    message_id: u32,
+    sender: Sender<TFrameId>,
+    pending_ids: Arc<PendingIds>,
+}
+
+impl FrameOutput {
+    pub async fn send(&self, frame: TFrame) -> Result<(), TChannelError> {
+        let frame = TFrameId::new(self.message_id, frame);
+        self.sender.send(frame).await?;
+        Ok(())
+    }
+
+    //TODO figure out how to automatically close it? impl Sink? do it on Deref?
+    pub async fn close(&self) {
+        self.pending_ids.remove(&self.message_id).await;
     }
 }
 
 struct FrameSender {
-    framed_write: Arc<Mutex<FramedWrite<OwnedWriteHalf, TFrameCodec>>>,
+    framed_write: Arc<Mutex<FramedWrite<OwnedWriteHalf, TFrameIdCodec>>>,
     buffer_size: usize,
 }
 
 impl FrameSender {
     pub fn spawn(
-        framed_write: FramedWrite<OwnedWriteHalf, TFrameCodec>,
-        frame_receiver: tokio::sync::mpsc::Receiver<TFrame>,
+        framed_write: FramedWrite<OwnedWriteHalf, TFrameIdCodec>,
+        frame_receiver: tokio::sync::mpsc::Receiver<TFrameId>,
         buffer_size: usize,
     ) -> JoinHandle<()> {
         let mut frame_sender = FrameSender {
@@ -204,7 +245,7 @@ impl FrameSender {
         })
     }
 
-    async fn run(&self, receiver_stream: ReceiverStream<TFrame>) {
+    async fn run(&self, receiver_stream: ReceiverStream<TFrameId>) {
         debug!("Starting FrameSender");
         receiver_stream
             .ready_chunks(self.buffer_size)
@@ -212,7 +253,7 @@ impl FrameSender {
             .await
     }
 
-    async fn send_frames(&self, frames: Vec<TFrame>) {
+    async fn send_frames(&self, frames: Vec<TFrameId>) {
         let mut framed_write = self.framed_write.lock().await;
         for frame in frames {
             debug!("Writing frame (id: {})", frame.id());
@@ -233,7 +274,7 @@ struct FrameReceiver {
 
 impl FrameReceiver {
     pub fn spawn(
-        framed_read: FramedRead<OwnedReadHalf, TFrameCodec>,
+        framed_read: FramedRead<OwnedReadHalf, TFrameIdCodec>,
         pending_ids: Arc<PendingIds>,
     ) -> JoinHandle<()> {
         let mut frame_receiver = FrameReceiver { pending_ids };
@@ -245,7 +286,7 @@ impl FrameReceiver {
         })
     }
 
-    async fn run(&self, frame_input: FramedRead<OwnedReadHalf, TFrameCodec>) {
+    async fn run(&self, frame_input: FramedRead<OwnedReadHalf, TFrameIdCodec>) {
         debug!("Starting FrameReceiver");
         frame_input
             .filter_map(|frame_res| match frame_res {
@@ -285,13 +326,12 @@ impl bb8::ManageConnection for ConnectionManager {
         let mut bytes = BytesMut::new();
         let init = InitBuilder::default().build()?;
         init.encode(&mut bytes);
-        let mut frame = TFrameBuilder::default()
-            .id(id)
+        let frame = TFrameBuilder::default()
             .frame_type(Type::InitRequest)
             .payload(bytes.freeze())
             .build()?;
         // let response = connection.send(frame).await?;
-        match connection.send(frame).await {
+        match connection.send_one(frame).await {
             Ok(response) => Ok(connection),
             Err(err) => {
                 println!("Err: {}", err);
@@ -305,12 +345,12 @@ impl bb8::ManageConnection for ConnectionManager {
     }
 
     async fn is_valid(&self, conn: &mut PooledConnection<'_, Self>) -> Result<(), Self::Error> {
-        println!("Is valid?");
-        todo!()
+        error!("Is valid?");
+        Ok(())
     }
 
     fn has_broken(&self, conn: &mut Self::Connection) -> bool {
-        println!("Has broken?");
-        todo!()
+        error!("Has broken?");
+        false
     }
 }

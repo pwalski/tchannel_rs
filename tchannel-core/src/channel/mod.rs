@@ -5,7 +5,7 @@ pub mod messages;
 use crate::channel::connection::{ConnectionOptions, ConnectionPools, ConnectionPoolsBuilder};
 use crate::channel::frames::payloads::Codec;
 use crate::channel::frames::payloads::{Init, InitBuilder};
-use crate::channel::frames::{TFrame, TFrameBuilder, Type};
+use crate::channel::frames::{TFrame, Type};
 use crate::channel::messages::{Message, MessageCodec, Request, Response};
 use crate::handlers::RequestHandler;
 use crate::{Error, TChannelError};
@@ -89,7 +89,6 @@ impl SubChannel {
         &self,
         request: REQ,
         host: SocketAddr,
-        port: u16,
     ) -> Result<RES, crate::TChannelError> {
         let pool = self.connection_pools.get_or_create(host).await?;
         let connection = pool.get().await?;
@@ -120,8 +119,6 @@ impl SubChannel {
         // }
         // //////////
 
-        let messsage_id = connection.next_message_id(); // stupid
-                                                        // write to message stream
         error!("unimplemented");
         Err(TChannelError::from("unimplemented".to_string()))
     }

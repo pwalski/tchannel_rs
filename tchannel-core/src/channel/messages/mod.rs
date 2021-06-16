@@ -105,12 +105,7 @@ pub trait MessageChannel {
     type REQ: Request;
     type RES: Response + TryFrom<TFrame>;
 
-    async fn send(
-        &self,
-        request: Self::REQ,
-        host: SocketAddr,
-        port: u16,
-    ) -> Result<Self::RES, TChannelError>;
+    async fn send(&self, request: Self::REQ, host: SocketAddr) -> Result<Self::RES, TChannelError>;
 }
 
 pub struct MessageCodec {}

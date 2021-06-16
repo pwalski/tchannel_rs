@@ -1,3 +1,4 @@
+extern crate core;
 extern crate num;
 
 #[macro_use]
@@ -10,6 +11,9 @@ extern crate num_derive;
 extern crate derive_builder;
 
 #[macro_use]
+extern crate derive_new;
+
+#[macro_use]
 extern crate bitflags;
 
 #[macro_use]
@@ -18,12 +22,13 @@ extern crate log;
 pub mod channel;
 pub mod handlers;
 
-use crate::channel::frames::TFrame;
+use crate::channel::frames::{TFrame, TFrameId};
 use crate::TChannelError::{FrameCodecError, FrameError};
 use bb8::RunError;
 use std::fmt::Formatter;
 use std::string::FromUtf8Error;
 use thiserror::Error;
+use tokio::sync::mpsc::error::SendError;
 use tokio::sync::oneshot::error::RecvError;
 
 #[derive(Error, Debug)]
@@ -52,6 +57,12 @@ pub enum TChannelError {
     ReceiveError {
         #[from]
         source: RecvError,
+    },
+
+    #[error("Send error")]
+    SendError {
+        #[from]
+        source: SendError<TFrameId>,
     },
 
     #[error("Frame handling error")]
