@@ -22,10 +22,10 @@ extern crate log;
 pub mod channel;
 pub mod handlers;
 
-use crate::channel::frames::{TFrame, TFrameId};
+use crate::channel::frames::payloads::ErrorMsg;
+use crate::channel::frames::{TFrame, TFrameId, Type};
 use crate::TChannelError::{FrameCodecError, FrameError};
 use bb8::RunError;
-use std::fmt::Formatter;
 use std::string::FromUtf8Error;
 use thiserror::Error;
 use tokio::sync::mpsc::error::SendError;
@@ -34,8 +34,8 @@ use tokio::sync::oneshot::error::RecvError;
 #[derive(Error, Debug)]
 pub enum TChannelError {
     /// Represents general error.
-    #[error("Error")]
-    Error,
+    #[error("Error: {0}")]
+    Error(String),
 
     /// Represents all other cases of `std::io::Error`.
     #[error(transparent)]
@@ -67,6 +67,12 @@ pub enum TChannelError {
 
     #[error("Frame handling error")]
     FrameError(TFrame),
+
+    #[error("Response error: {0:?}")]
+    ResponseError(ErrorMsg),
+
+    #[error("Unexpected response: {0:?}")]
+    UnexpectedResponseError(Type),
 }
 
 impl From<String> for TChannelError {
@@ -77,7 +83,7 @@ impl From<String> for TChannelError {
 
 impl From<RunError<TChannelError>> for TChannelError {
     fn from(err: RunError<TChannelError>) -> Self {
-        TChannelError::Error
+        TChannelError::Error(format!("RunError: {}", err))
     }
 }
 

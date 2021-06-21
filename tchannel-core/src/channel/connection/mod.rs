@@ -1,7 +1,7 @@
-use crate::channel::frames::payloads::Codec;
+use crate::channel::frames::payloads::ErrorMsg;
 use crate::channel::frames::payloads::Init;
-use crate::channel::frames::payloads::InitBuilder;
-use crate::channel::frames::{TFrame, TFrameBuilder, TFrameId, TFrameIdCodec, Type};
+use crate::channel::frames::payloads::{Codec, PROTOCOL_VERSION};
+use crate::channel::frames::{TFrame, TFrameId, TFrameIdCodec, Type};
 use crate::TChannelError;
 use async_trait::async_trait;
 use bb8::{ErrorSink, ManageConnection, Pool, PooledConnection, RunError};
@@ -93,6 +93,7 @@ pub struct ConnectionPools {
 }
 
 impl ConnectionPools {
+    //TODO do not like name
     pub async fn get_or_create(
         &self,
         addr: SocketAddr,
@@ -176,7 +177,7 @@ impl Connection {
         frame_output.send(frame).await?;
         let response = frame_receiver.recv().await;
         frame_output.close().await;
-        response.ok_or_else(|| TChannelError::Error) //TODO use proper error
+        response.ok_or_else(|| TChannelError::Error(String::from("Received no response")))
     }
 
     //TODO better name? pass output as an fn arg?
@@ -320,28 +321,8 @@ impl bb8::ManageConnection for ConnectionManager {
     type Error = TChannelError;
 
     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
-        let connection = Connection::connect(self.addr, self.frame_buffer_size).await?; //TODO how to init/force ?
-
-        let id = connection.next_message_id();
-        let mut bytes = BytesMut::new();
-        let init = InitBuilder::default().build()?;
-        init.encode(&mut bytes);
-        let frame = TFrameBuilder::default()
-            .frame_type(Type::InitRequest)
-            .payload(bytes.freeze())
-            .build()?;
-        // let response = connection.send(frame).await?;
-        match connection.send_one(frame).await {
-            Ok(response) => Ok(connection),
-            Err(err) => {
-                println!("Err: {}", err);
-                return Err(err);
-            }
-        }
-        // debug!("Got response {:?}", response);
-        // assert_eq!(*response.id(), id); //TODO handle it
-        // debug!("OK");
-        // Ok(connection)
+        let connection = Connection::connect(self.addr, self.frame_buffer_size).await?;
+        Self::verify(connection).await
     }
 
     async fn is_valid(&self, conn: &mut PooledConnection<'_, Self>) -> Result<(), Self::Error> {
@@ -352,5 +333,38 @@ impl bb8::ManageConnection for ConnectionManager {
     fn has_broken(&self, conn: &mut Self::Connection) -> bool {
         error!("Has broken?");
         false
+    }
+}
+
+impl ConnectionManager {
+    async fn verify(connection: Connection) -> Result<Connection, TChannelError> {
+        let mut frame_id = Self::init_handshake(&connection).await?;
+        match frame_id.frame().frame_type() {
+            Type::InitResponse => {
+                let init = Init::decode(frame_id.frame_mut().payload_mut())?;
+                debug!("Received Init response: {:?}", init);
+                if (*init.version() == PROTOCOL_VERSION) {
+                    return Ok(connection);
+                }
+                return Err(TChannelError::Error(format!(
+                    "Unsupported protocol version: {} ",
+                    init.version()
+                )));
+            }
+            Type::Error => {
+                let error = ErrorMsg::decode(frame_id.frame_mut().payload_mut())?;
+                debug!("Received error response {:?}", error);
+                return Err(TChannelError::ResponseError(error));
+            }
+            other => return Err(TChannelError::UnexpectedResponseError(*other)),
+        }
+    }
+
+    async fn init_handshake(connection: &Connection) -> Result<TFrameId, TChannelError> {
+        let mut bytes = BytesMut::new();
+        let init = Init::default();
+        init.encode(&mut bytes);
+        let frame = TFrame::new(Type::InitRequest, bytes.freeze());
+        connection.send_one(frame).await
     }
 }

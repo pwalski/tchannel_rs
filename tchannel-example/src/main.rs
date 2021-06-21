@@ -41,15 +41,12 @@ pub async fn main() -> Result<(), Error> {
     transport_headers.insert(TransportHeader::CallerNameKey, "keyvalue-service");
 
     let headers: HashMap<String, String> = HashMap::new();
-    let init_frame = InitBuilder::default().headers(headers).build()?;
+    let init_frame = Init::new(PROTOCOL_VERSION, headers);
     let mut bytes = BytesMut::new();
-    let id = 1;
+    // let id = 1;
     init_frame.encode(&mut bytes);
-    let frame = TFrameBuilder::default()
-        .id(1)
-        .frame_type(Type::InitRequest)
-        .payload(bytes.freeze())
-        .build()?;
+    let frame = TFrame::new(Type::InitRequest, bytes.freeze());
+    let frame_id = TFrameId::new(1, frame);
 
     // let mut connection = connection().await; // ???
     // println!("writing frame");
@@ -69,7 +66,7 @@ pub async fn main() -> Result<(), Error> {
 
     let stream = connect().await.unwrap();
     let mut transport = Framed::new(stream, TFrameIdCodec::default());
-    let sent = transport.send(frame).await;
+    let sent = transport.send(frame_id).await;
     println!("Sent: {:?}", sent);
 
     while let Some(request) = transport.next().await {

@@ -7,7 +7,7 @@ use tokio_util::codec::{Decoder, Encoder};
 pub const FRAME_HEADER_LENGTH: u16 = 16;
 pub const ZERO: u8 = 0;
 
-#[derive(Copy, Clone, Debug, FromPrimitive)]
+#[derive(Copy, Clone, Debug, FromPrimitive, PartialEq)]
 pub enum Type {
     // First message on every connection must be init
     InitRequest = 0x1,
@@ -40,13 +40,14 @@ pub enum Type {
     PingResponse = 0xd1,
 
     // Protocol level error.
-    Error = 0x00,
+    Error = 0xff,
 }
 
-#[derive(Debug, Getters, Builder)]
+#[derive(Debug, Getters, MutGetters, new)]
 pub struct TFrame {
     #[get = "pub"]
     frame_type: Type,
+    #[get_mut = "pub"]
     #[get = "pub"]
     payload: Bytes,
 }
@@ -57,10 +58,11 @@ impl TFrame {
     }
 }
 
-#[derive(Debug, Getters, new)]
+#[derive(Debug, Getters, MutGetters, new)]
 pub struct TFrameId {
     #[get = "pub"]
     id: u32,
+    #[get_mut = "pub"]
     #[get = "pub"]
     frame: TFrame,
 }
@@ -102,7 +104,16 @@ impl Decoder for TFrameIdCodec {
                 "Frame too short".to_string(),
             ));
         }
-        let frame_type = num::FromPrimitive::from_u8(src.get_u8()).unwrap();
+        let frame_type_bytes = src.get_u8();
+        let frame_type = match num::FromPrimitive::from_u8(frame_type_bytes) {
+            Some(frame_type) => frame_type,
+            None => {
+                return Err(TChannelError::FrameCodecError(format!(
+                    "Unknown frame type {}",
+                    frame_type_bytes
+                )))
+            }
+        };
         src.advance(1); // skip
         let id = src.get_u32();
         src.advance(8);

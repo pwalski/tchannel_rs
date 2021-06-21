@@ -4,7 +4,7 @@ pub mod messages;
 
 use crate::channel::connection::{ConnectionOptions, ConnectionPools, ConnectionPoolsBuilder};
 use crate::channel::frames::payloads::Codec;
-use crate::channel::frames::payloads::{Init, InitBuilder};
+use crate::channel::frames::payloads::Init;
 use crate::channel::frames::{TFrame, Type};
 use crate::channel::messages::{Message, MessageCodec, Request, Response};
 use crate::handlers::RequestHandler;

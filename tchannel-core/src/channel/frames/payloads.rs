@@ -6,8 +6,8 @@ use std::convert::TryFrom;
 use std::fmt::Write;
 use std::string::FromUtf8Error;
 
-const PROTOCOL_VERSION: u16 = 2;
-const TRACING_HEADER_LENGTH: u8 = 25;
+pub const PROTOCOL_VERSION: u16 = 2;
+pub const TRACING_HEADER_LENGTH: u8 = 25;
 
 pub trait Codec: Sized {
     fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError>;
@@ -98,20 +98,17 @@ impl Codec for Tracing {
     }
 }
 
-#[derive(Debug, Default, Builder)]
-#[builder(default, pattern = "owned", build_fn(validate = "Self::validate"))]
+#[derive(Debug, Getters, new)]
 pub struct Init {
-    #[builder(default = "2")] //TODO implementation using PROTOCOL_VERSION would be too verbose
+    #[get = "pub"]
     version: u16,
+    #[get = "pub"]
     headers: HashMap<String, String>,
 }
 
-impl InitBuilder {
-    fn validate(&self) -> Result<(), String> {
-        match self.version {
-            Some(PROTOCOL_VERSION) | None => Ok(()),
-            Some(version) => Err(format!("Unsupported version {}", version)),
-        }
+impl Default for Init {
+    fn default() -> Self {
+        Init::new(PROTOCOL_VERSION, HashMap::default())
     }
 }
 
@@ -123,10 +120,7 @@ impl Codec for Init {
     }
 
     fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
-        Ok(InitBuilder::default()
-            .version(src.get_u16())
-            .headers(decode_headers(src)?)
-            .build()?)
+        Ok(Init::new(src.get_u16(), decode_headers(src)?))
     }
 }
 
@@ -313,13 +307,13 @@ impl Codec for Claim {
 
 #[derive(Debug, Builder)]
 #[builder(pattern = "owned")]
-pub struct Error {
+pub struct ErrorMsg {
     code: ErrorCode,
     tracing: Tracing,
     message: String,
 }
 
-impl Codec for Error {
+impl Codec for ErrorMsg {
     fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
         dst.put_u8(self.code as u8);
         self.tracing.encode(dst)?;
@@ -328,7 +322,7 @@ impl Codec for Error {
     }
 
     fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
-        Ok(ErrorBuilder::default()
+        Ok(ErrorMsgBuilder::default()
             .code(decode_bitflag(src.get_u8(), ErrorCode::from_u8)?)
             .tracing(Tracing::decode(src)?)
             .message(decode_string(src)?)
