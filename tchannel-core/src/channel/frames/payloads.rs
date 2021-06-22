@@ -70,8 +70,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Builder)]
-#[builder(pattern = "owned")]
+#[derive(Debug, new)]
 pub struct Tracing {
     span_id: u64,
     parent_id: u64,
@@ -89,12 +88,12 @@ impl Codec for Tracing {
     }
 
     fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
-        Ok(TracingBuilder::default()
-            .span_id(src.get_u64())
-            .parent_id(src.get_u64())
-            .trace_id(src.get_u64())
-            .trace_flags(decode_bitflag(src.get_u8(), TraceFlags::from_bits)?)
-            .build()?)
+        Ok(Tracing::new(
+            src.get_u64(),
+            src.get_u64(),
+            src.get_u64(),
+            decode_bitflag(src.get_u8(), TraceFlags::from_bits)?,
+        ))
     }
 }
 
@@ -124,8 +123,7 @@ impl Codec for Init {
     }
 }
 
-#[derive(Debug, Builder)]
-#[builder(pattern = "owned")]
+#[derive(Debug, new)]
 pub struct CallCommonFields {
     // nh:1 (hk~1, hv~1){nh}
     headers: HashMap<String, String>,
@@ -148,18 +146,17 @@ impl Codec for CallCommonFields {
 
     fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
         let headers = decode_headers(src)?;
-        let mut builder = CallCommonFieldsBuilder::default().headers(headers);
         let (checksum_type, checksum) = decode_checksum(src)?;
-        Ok(builder
-            .checksum_type(checksum_type)
-            .checksum(checksum)
-            .payload(src.split_off(src.len() - src.remaining()))
-            .build()?)
+        Ok(CallCommonFields::new(
+            headers,
+            checksum_type,
+            checksum,
+            src.split_off(src.len() - src.remaining()),
+        ))
     }
 }
 
-#[derive(Debug, Builder)]
-#[builder(pattern = "owned")]
+#[derive(Debug, new)]
 struct CallRequest {
     // flags:1
     flags: Flags,
@@ -184,18 +181,17 @@ impl Codec for CallRequest {
     }
 
     fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
-        Ok(CallRequestBuilder::default()
-            .flags(decode_bitflag(src.get_u8(), Flags::from_bits)?)
-            .ttl(src.get_u32())
-            .tracing(Tracing::decode(src)?)
-            .service(decode_string(src)?)
-            .fields(CallCommonFields::decode(src)?)
-            .build()?)
+        Ok(CallRequest::new(
+            decode_bitflag(src.get_u8(), Flags::from_bits)?,
+            src.get_u32(),
+            Tracing::decode(src)?,
+            decode_string(src)?,
+            CallCommonFields::decode(src)?,
+        ))
     }
 }
 
-#[derive(Debug, Builder)]
-#[builder(pattern = "owned")]
+#[derive(Debug, new)]
 struct CallResponse {
     // flags:1
     flags: Flags,
@@ -217,17 +213,16 @@ impl Codec for CallResponse {
     }
 
     fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
-        Ok(CallResponseBuilder::default()
-            .flags(decode_bitflag(src.get_u8(), Flags::from_bits)?)
-            .code(decode_bitflag(src.get_u8(), ResponseCode::from_u8)?)
-            .tracing(Tracing::decode(src)?)
-            .fields(CallCommonFields::decode(src)?)
-            .build()?)
+        Ok(CallResponse::new(
+            decode_bitflag(src.get_u8(), Flags::from_bits)?,
+            decode_bitflag(src.get_u8(), ResponseCode::from_u8)?,
+            Tracing::decode(src)?,
+            CallCommonFields::decode(src)?,
+        ))
     }
 }
 
-#[derive(Debug, Builder)]
-#[builder(pattern = "owned")]
+#[derive(Debug, new)]
 pub struct CallContinue {
     // flags:1
     flags: Flags,
@@ -243,15 +238,14 @@ impl Codec for CallContinue {
     }
 
     fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
-        Ok(CallContinueBuilder::default()
-            .flags(decode_bitflag(src.get_u8(), Flags::from_bits)?)
-            .fields(CallCommonFields::decode(src)?)
-            .build()?)
+        Ok(CallContinue::new(
+            decode_bitflag(src.get_u8(), Flags::from_bits)?,
+            CallCommonFields::decode(src)?,
+        ))
     }
 }
 
-#[derive(Debug, Builder)]
-#[builder(pattern = "owned")]
+#[derive(Debug, new)]
 pub struct Cancel {
     // ttl:4
     ttl: u32,
@@ -269,16 +263,15 @@ impl Codec for Cancel {
     }
 
     fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
-        Ok(CancelBuilder::default()
-            .ttl(src.get_u32())
-            .tracing(Tracing::decode(src)?)
-            .why(decode_string(src)?)
-            .build()?)
+        Ok(Cancel::new(
+            src.get_u32(),
+            Tracing::decode(src)?,
+            decode_string(src)?,
+        ))
     }
 }
 
-#[derive(Debug, Builder)]
-#[builder(pattern = "owned")]
+#[derive(Debug, new)]
 pub struct Claim {
     // ttl:4
     ttl: u32,
@@ -294,19 +287,15 @@ impl Codec for Claim {
     }
 
     fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
-        Ok(ClaimBuilder::default()
-            .ttl(src.get_u32())
-            .tracing(Tracing::decode(src)?)
-            .build()?)
+        Ok(Claim::new(src.get_u32(), Tracing::decode(src)?))
     }
 }
 
-// pub struct PingRequest {}
+// pub struct PingRequest {} // no body
 
-// pub struct PingResponse {}
+// pub struct PingResponse {} // no body
 
-#[derive(Debug, Builder)]
-#[builder(pattern = "owned")]
+#[derive(Debug, new)]
 pub struct ErrorMsg {
     code: ErrorCode,
     tracing: Tracing,
@@ -322,11 +311,11 @@ impl Codec for ErrorMsg {
     }
 
     fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
-        Ok(ErrorMsgBuilder::default()
-            .code(decode_bitflag(src.get_u8(), ErrorCode::from_u8)?)
-            .tracing(Tracing::decode(src)?)
-            .message(decode_string(src)?)
-            .build()?)
+        Ok(ErrorMsg::new(
+            decode_bitflag(src.get_u8(), ErrorCode::from_u8)?,
+            Tracing::decode(src)?,
+            decode_string(src)?,
+        ))
     }
 }
 

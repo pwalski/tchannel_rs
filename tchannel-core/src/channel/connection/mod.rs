@@ -343,20 +343,20 @@ impl ConnectionManager {
             Type::InitResponse => {
                 let init = Init::decode(frame_id.frame_mut().payload_mut())?;
                 debug!("Received Init response: {:?}", init);
-                if (*init.version() == PROTOCOL_VERSION) {
-                    return Ok(connection);
+                match *init.version() {
+                    PROTOCOL_VERSION => Ok(connection),
+                    other_version => Err(TChannelError::Error(format!(
+                        "Unsupported protocol version: {} ",
+                        other_version
+                    ))),
                 }
-                return Err(TChannelError::Error(format!(
-                    "Unsupported protocol version: {} ",
-                    init.version()
-                )));
             }
             Type::Error => {
                 let error = ErrorMsg::decode(frame_id.frame_mut().payload_mut())?;
                 debug!("Received error response {:?}", error);
                 return Err(TChannelError::ResponseError(error));
             }
-            other => return Err(TChannelError::UnexpectedResponseError(*other)),
+            other_type => return Err(TChannelError::UnexpectedResponseError(*other_type)),
         }
     }
 
