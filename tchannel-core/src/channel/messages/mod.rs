@@ -1,8 +1,8 @@
-use crate::channel::frames::TFrame;
+use crate::channel::frames::{TFrame, TFrameStream};
 use crate::TChannelError;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
 use std::net::SocketAddr;
 use strum_macros::ToString;
@@ -56,11 +56,17 @@ pub enum RetryFlagValue {
 
 pub enum ResponseCode {}
 
-pub trait Message: Debug + Sized {}
+pub trait Message:
+    TryInto<TFrameStream, Error = TChannelError>
+    + TryFrom<TFrameStream, Error = TChannelError>
+    + Debug
+    + Sized
+{
+}
 
-pub trait Request: Message + Debug {}
+pub trait Request: Message {}
 
-pub trait Response: Message + Debug {}
+pub trait Response: Message {}
 
 #[derive(Default, Debug, Builder, Getters)]
 #[builder(pattern = "owned")]
@@ -102,8 +108,8 @@ pub trait ResponseBuilder<RES: Response> {
 
 #[async_trait]
 pub trait MessageChannel {
-    type REQ: Request;
-    type RES: Response + TryFrom<TFrame>;
+    type REQ: Request + TryInto<TFrameStream, Error = TChannelError>;
+    type RES: Response + TryFrom<TFrameStream, Error = TChannelError>;
 
     async fn send(&self, request: Self::REQ, host: SocketAddr) -> Result<Self::RES, TChannelError>;
 }

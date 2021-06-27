@@ -1,17 +1,24 @@
 use crate::channel::messages::*;
 
 #[derive(Default, Debug)]
-pub struct ThriftRequest {
+pub struct ThriftMessage {
     base: BaseRequest,
 }
 
-impl Message for ThriftRequest {}
+impl TryFrom<TFrameStream> for ThriftMessage {
+    type Error = TChannelError;
+    fn try_from(value: TFrameStream) -> Result<Self, Self::Error> {
+        todo!()
+    }
+}
 
-impl Request for ThriftRequest {}
+impl TryInto<TFrameStream> for ThriftMessage {
+    type Error = TChannelError;
+    fn try_into(self) -> Result<TFrameStream, Self::Error> {
+        todo!()
+    }
+}
 
-#[derive(Debug)]
-pub struct ThriftResponse {}
+impl Message for ThriftMessage {}
 
-impl Message for ThriftResponse {}
-
-impl Response for ThriftResponse {}
+impl Request for ThriftMessage {}

@@ -94,7 +94,7 @@ pub struct ConnectionPools {
 
 impl ConnectionPools {
     //TODO do not like name
-    pub async fn get_or_create(
+    pub async fn get(
         &self,
         addr: SocketAddr,
     ) -> Result<Arc<Pool<ConnectionManager>>, RunError<TChannelError>> {
@@ -201,10 +201,10 @@ impl Connection {
     }
 }
 
-type FrameInput = ReceiverStream<TFrameId>;
+pub type FrameInput = ReceiverStream<TFrameId>;
 
 #[derive(Getters, new)]
-struct FrameOutput {
+pub struct FrameOutput {
     message_id: u32,
     sender: Sender<TFrameId>,
     pending_ids: Arc<PendingIds>,

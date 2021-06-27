@@ -2,15 +2,20 @@ pub mod connection;
 pub mod frames;
 pub mod messages;
 
-use crate::channel::connection::{ConnectionOptions, ConnectionPools, ConnectionPoolsBuilder};
+use crate::channel::connection::{
+    ConnectionOptions, ConnectionPools, ConnectionPoolsBuilder, FrameOutput,
+};
 use crate::channel::frames::payloads::Codec;
 use crate::channel::frames::payloads::Init;
-use crate::channel::frames::{TFrame, Type};
+use crate::channel::frames::{TFrame, TFrameStream, Type};
 use crate::channel::messages::{Message, MessageCodec, Request, Response};
 use crate::handlers::RequestHandler;
 use crate::{Error, TChannelError};
 use bytes::{Bytes, BytesMut};
 use futures::channel::oneshot::Sender;
+use futures::FutureExt;
+use futures::StreamExt;
+use futures::{future, TryStreamExt};
 use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
@@ -20,6 +25,7 @@ use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio::net::ToSocketAddrs;
 use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
 pub struct TChannel {
@@ -85,41 +91,26 @@ impl SubChannel {
         self
     }
 
-    async fn send<REQ: Request + TryInto<TFrame>, RES: Response + TryFrom<TFrame>>(
+    async fn send<REQ: Request, RES: Response>(
         &self,
         request: REQ,
         host: SocketAddr,
     ) -> Result<RES, crate::TChannelError> {
-        let pool = self.connection_pools.get_or_create(host).await?;
+        let frame_stream = request.try_into()?;
+        let pool = self.connection_pools.get(host).await?;
         let connection = pool.get().await?;
+        let (frame_output, frame_input) = connection.send_many().await;
+        Self::send_frames(frame_stream, frame_output); // handle failure?
+        let str = frame_input.map(|frame_id| frame_id.frame);
+        RES::try_from(Box::pin(str))
+    }
 
-        // ///////////////////
-        // debug!("Building frame");
-        // let id = connection.next_message_id();
-        // let mut bytes = BytesMut::new();
-        // let init = InitBuilder::default().build()?;
-        // init.encode(&mut bytes);
-        // let mut frame = TFrameBuilder::default()
-        //     .id(id)
-        //     .frame_type(Type::InitRequest)
-        //     .payload(bytes.freeze())
-        //     .build()?;
-        // // let response = connection.send(frame).await?;
-        // use std::thread;
-        // use std::time::Duration;
-        // debug!("Sleeping");
-        // thread::sleep(Duration::from_millis(8000));
-        // debug!("Sending frame");
-        // match connection.send(frame).await {
-        //     Ok(response) => todo!("test"),
-        //     Err(err) => {
-        //         debug!("Err: {}", err);
-        //         return Err(err);
-        //     }
-        // }
-        // //////////
-
-        error!("unimplemented");
-        Err(TChannelError::from("unimplemented".to_string()))
+    async fn send_frames(frame_stream: TFrameStream, frame_output: FrameOutput) -> JoinHandle<()> {
+        tokio::spawn(async move {
+            frame_stream
+                .then(|frame| frame_output.send(frame))
+                .inspect_err(|err| warn!("Failed to send frame. Error: {}", err))
+                .take_while(|res| future::ready(res.is_ok()));
+        })
     }
 }

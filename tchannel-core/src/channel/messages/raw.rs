@@ -1,9 +1,10 @@
-use crate::channel::frames::TFrame;
+use crate::channel::frames::{TFrame, TFrameStream};
 use crate::channel::messages::*;
 use crate::channel::SubChannel;
 use crate::Error;
 use crate::TChannelError::FrameCodecError;
 use bytes::BytesMut;
+use futures::Stream;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::future::Future;
@@ -21,18 +22,16 @@ impl Request for RawMessage {}
 
 impl Response for RawMessage {}
 
-impl TryFrom<TFrame> for RawMessage {
+impl TryFrom<TFrameStream> for RawMessage {
     type Error = TChannelError;
-
-    fn try_from(value: TFrame) -> Result<Self, Self::Error> {
+    fn try_from(value: TFrameStream) -> Result<Self, Self::Error> {
         todo!()
     }
 }
 
-impl TryInto<TFrame> for RawMessage {
+impl TryInto<TFrameStream> for RawMessage {
     type Error = TChannelError;
-
-    fn try_into(self) -> Result<TFrame, Self::Error> {
+    fn try_into(self) -> Result<TFrameStream, Self::Error> {
         todo!()
     }
 }

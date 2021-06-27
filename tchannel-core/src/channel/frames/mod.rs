@@ -2,6 +2,8 @@ pub mod payloads;
 
 use crate::TChannelError;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use futures::Stream;
+use std::pin::Pin;
 use tokio_util::codec::{Decoder, Encoder};
 
 pub const FRAME_HEADER_LENGTH: u16 = 16;
@@ -43,6 +45,8 @@ pub enum Type {
     Error = 0xff,
 }
 
+pub type TFrameStream = Pin<Box<dyn Stream<Item = TFrame> + Send>>;
+
 #[derive(Debug, Getters, MutGetters, new)]
 pub struct TFrame {
     #[get = "pub"]
@@ -64,7 +68,7 @@ pub struct TFrameId {
     id: u32,
     #[get_mut = "pub"]
     #[get = "pub"]
-    frame: TFrame,
+    pub frame: TFrame,
 }
 
 #[derive(Default, Debug)]
