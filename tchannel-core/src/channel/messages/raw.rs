@@ -24,7 +24,7 @@ impl Response for RawMessage {}
 
 impl TryFrom<TFrameStream> for RawMessage {
     type Error = TChannelError;
-    fn try_from(value: TFrameStream) -> Result<Self, Self::Error> {
+    fn try_from(stream: TFrameStream) -> Result<Self, Self::Error> {
         todo!()
     }
 }

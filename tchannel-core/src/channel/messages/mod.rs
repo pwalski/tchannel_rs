@@ -1,6 +1,7 @@
 use crate::channel::frames::{TFrame, TFrameStream};
 use crate::TChannelError;
 use async_trait::async_trait;
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
@@ -115,3 +116,35 @@ pub trait MessageChannel {
 }
 
 pub struct MessageCodec {}
+
+enum ArgEncodingStatus {
+    //Completely stored in frame
+    Complete,
+    //Completely stored in frame with maxed frame capacity
+    CompleteAtTheEnd,
+    //Partially stored in frame
+    Incomplete,
+}
+
+fn encode_arg(src: &mut Bytes, dst: &mut BytesMut) -> Result<ArgEncodingStatus, TChannelError> {
+    let src_remaining = src.remaining();
+    let dst_remaining = dst.capacity() - dst.len();
+    if src_remaining == 0 {
+        Ok(ArgEncodingStatus::Complete)
+    } else if let 0..=2 = dst_remaining {
+        Ok(ArgEncodingStatus::Incomplete)
+    } else if src_remaining + 2 > dst_remaining {
+        let fragment = src.split_to(dst_remaining - 2);
+        dst.put_u16(fragment.len() as u16);
+        dst.put_slice(fragment.as_ref());
+        Ok(ArgEncodingStatus::Incomplete)
+    } else {
+        dst.put_u16(src.len() as u16);
+        dst.put_slice(src.as_ref());
+        if (src_remaining + 2 == dst_remaining) {
+            Ok(ArgEncodingStatus::CompleteAtTheEnd)
+        } else {
+            Ok(ArgEncodingStatus::Complete)
+        }
+    }
+}

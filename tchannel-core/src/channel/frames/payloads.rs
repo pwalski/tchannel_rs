@@ -132,7 +132,9 @@ pub struct CallCommonFields {
     // (csum:4){0,1}
     checksum: Option<u32>,
     // arg1~2 arg2~2 arg3~2
-    payload: Bytes,
+    arg1: Option<Bytes>,
+    arg2: Option<Bytes>,
+    arg3: Option<Bytes>,
 }
 
 impl Codec for CallCommonFields {
@@ -140,7 +142,9 @@ impl Codec for CallCommonFields {
         encode_headers(self.headers, dst)?;
         dst.put_u8(self.checksum_type as u8);
         encode_checksum(self.checksum_type, self.checksum, dst)?;
-        dst.put(self.payload);
+        encode_arg(&self.arg1, dst)?;
+        encode_arg(&self.arg2, dst)?;
+        encode_arg(&self.arg3, dst)?;
         Ok(())
     }
 
@@ -151,7 +155,9 @@ impl Codec for CallCommonFields {
             headers,
             checksum_type,
             checksum,
-            src.split_off(src.len() - src.remaining()),
+            decode_arg(src)?, //arg1
+            decode_arg(src)?, //arg2
+            decode_arg(src)?, //arg3
         ))
     }
 }
@@ -378,4 +384,36 @@ fn decode_checksum(src: &mut Bytes) -> Result<(ChecksumType, Option<u32>), TChan
 
 fn decode_bitflag<T, F: Fn(u8) -> Option<T>>(byte: u8, decoder: F) -> Result<T, TChannelError> {
     decoder(byte).ok_or_else(|| TChannelError::FrameCodecError(format!("Unknown flag: {}", byte)))
+}
+
+fn encode_arg(src: &Option<Bytes>, dst: &mut BytesMut) -> Result<(), TChannelError> {
+    match src {
+        None => Ok(()),
+        Some(arg) => {
+            if (dst.remaining_mut() < arg.len() + 2) {
+                return Err(TChannelError::FrameCodecError(
+                    "Not enough capacity to save arg".to_string(),
+                ));
+            }
+            dst.put_u16(arg.len() as u16);
+            dst.put_slice(arg.as_ref()); // take len bytes from above
+            Ok(())
+        }
+    }
+}
+
+fn decode_arg(src: &mut Bytes) -> Result<Option<Bytes>, TChannelError> {
+    match src.remaining() {
+        0 => Ok(None),
+        1 => Err(TChannelError::FrameCodecError(
+            "Cannot read call arg length".to_string(),
+        )),
+        remaining => match src.get_u16() {
+            0 => Ok(None),
+            len if len > (remaining as u16 - 2) => Err(TChannelError::FrameCodecError(
+                "Wrong call arg length".to_string(),
+            )),
+            len => Ok(Some(src.split_to(len as usize))),
+        },
+    }
 }
