@@ -5,17 +5,18 @@ pub mod messages;
 use crate::channel::connection::{
     ConnectionOptions, ConnectionPools, ConnectionPoolsBuilder, FrameOutput,
 };
-use crate::channel::frames::payloads::Codec;
-use crate::channel::frames::payloads::Init;
+use crate::channel::frames::headers::TransportHeader::CallerNameKey;
+use crate::channel::frames::headers::{ArgSchemeValue, TransportHeader};
+use crate::channel::frames::payloads::{ChecksumType, Codec, TraceFlags, Tracing};
 use crate::channel::frames::{TFrame, TFrameStream, Type};
-use crate::channel::messages::{Message, MessageCodec, Request, Response};
+use crate::channel::messages::{Message, Request, Response};
 use crate::handlers::RequestHandler;
 use crate::{Error, TChannelError};
-use bytes::{Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::channel::oneshot::Sender;
-use futures::FutureExt;
 use futures::StreamExt;
 use futures::{future, TryStreamExt};
+use futures::{FutureExt, Stream};
 use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
@@ -96,7 +97,8 @@ impl SubChannel {
         request: REQ,
         host: SocketAddr,
     ) -> Result<RES, crate::TChannelError> {
-        let frame_stream = request.try_into()?;
+        let frame_stream = self.create_frames(request);
+        //TODO link/join futures
         let pool = self.connection_pools.get(host).await?;
         let connection = pool.get().await?;
         let (frame_output, frame_input) = connection.send_many().await;
@@ -112,5 +114,70 @@ impl SubChannel {
                 .inspect_err(|err| warn!("Failed to send frame. Error: {}", err))
                 .take_while(|res| future::ready(res.is_ok()));
         })
+    }
+
+    fn create_frames<REQ: Request>(&self, request: REQ) -> TFrameStream {
+        let headers = self.create_headers(REQ::arg_scheme());
+        let tracing = self.create_tracing();
+        // need headers length before fragmentation - calculate it or serialize it before serializing tframe
+        todo!()
+    }
+
+    fn create_headers(&self, arg_scheme: ArgSchemeValue) -> HashMap<String, String> {
+        let mut headers = HashMap::new();
+        headers.insert(
+            TransportHeader::ArgSchemeKey.to_string(),
+            arg_scheme.to_string(),
+        );
+        headers.insert(CallerNameKey.to_string(), self.service_name.clone()); //TODO RC? ref+lifetime?
+        return headers;
+    }
+
+    fn create_tracing(&self) -> Tracing {
+        Tracing::new(0, 0, 0, TraceFlags::NONE)
+    }
+}
+
+enum ArgEncodingStatus {
+    //Completely stored in frame
+    Complete,
+    //Completely stored in frame with maxed frame capacity
+    CompleteAtTheEnd,
+    //Partially stored in frame
+    Incomplete,
+}
+
+fn encode_arg(src: &mut Bytes, dst: &mut BytesMut) -> Result<ArgEncodingStatus, TChannelError> {
+    let src_remaining = src.remaining();
+    let dst_remaining = dst.capacity() - dst.len();
+    if src_remaining == 0 {
+        Ok(ArgEncodingStatus::Complete)
+    } else if let 0..=2 = dst_remaining {
+        Ok(ArgEncodingStatus::Incomplete)
+    } else if src_remaining + 2 > dst_remaining {
+        let fragment = src.split_to(dst_remaining - 2);
+        dst.put_u16(fragment.len() as u16);
+        dst.put_slice(fragment.as_ref());
+        Ok(ArgEncodingStatus::Incomplete)
+    } else {
+        dst.put_u16(src.len() as u16);
+        dst.put_slice(src.as_ref());
+        if (src_remaining + 2 == dst_remaining) {
+            Ok(ArgEncodingStatus::CompleteAtTheEnd)
+        } else {
+            Ok(ArgEncodingStatus::Complete)
+        }
+    }
+}
+
+fn calculate_checksum(
+    arg1: Option<Bytes>,
+    arg2: Option<Bytes>,
+    arg3: Option<Bytes>,
+    csum_type: ChecksumType,
+) -> Option<u32> {
+    match csum_type {
+        ChecksumType::None => None,
+        other => todo!("Unsupported checksum type {:?}", other),
     }
 }

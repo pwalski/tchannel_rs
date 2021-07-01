@@ -124,9 +124,7 @@ impl Codec for Init {
 }
 
 #[derive(Debug, new)]
-pub struct CallCommonFields {
-    // nh:1 (hk~1, hv~1){nh}
-    headers: HashMap<String, String>,
+pub struct CallArgs {
     // csumtype:1
     checksum_type: ChecksumType,
     // (csum:4){0,1}
@@ -137,9 +135,8 @@ pub struct CallCommonFields {
     arg3: Option<Bytes>,
 }
 
-impl Codec for CallCommonFields {
+impl Codec for CallArgs {
     fn encode(mut self, dst: &mut BytesMut) -> Result<(), TChannelError> {
-        encode_headers(self.headers, dst)?;
         dst.put_u8(self.checksum_type as u8);
         encode_checksum(self.checksum_type, self.checksum, dst)?;
         encode_arg(&self.arg1, dst)?;
@@ -149,10 +146,8 @@ impl Codec for CallCommonFields {
     }
 
     fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
-        let headers = decode_headers(src)?;
         let (checksum_type, checksum) = decode_checksum(src)?;
-        Ok(CallCommonFields::new(
-            headers,
+        Ok(CallArgs::new(
             checksum_type,
             checksum,
             decode_arg(src)?, //arg1
@@ -163,36 +158,86 @@ impl Codec for CallCommonFields {
 }
 
 #[derive(Debug, new)]
-struct CallRequest {
-    // flags:1
-    flags: Flags,
+struct CallRequestFields {
     // ttl:4
     ttl: u32,
     // tracing:25
     tracing: Tracing,
     // service~1
     service: String,
-    // common fields
-    fields: CallCommonFields,
+    // nh:1 (hk~1, hv~1){nh}
+    headers: HashMap<String, String>,
+}
+
+impl Codec for CallRequestFields {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+        dst.put_u32(self.ttl);
+        self.tracing.encode(dst)?;
+        encode_string(self.service, dst)?;
+        encode_headers(self.headers, dst)?;
+        Ok(())
+    }
+
+    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+        Ok(CallRequestFields::new(
+            src.get_u32(),
+            Tracing::decode(src)?,
+            decode_string(src)?,
+            decode_headers(src)?,
+        ))
+    }
+}
+
+#[derive(Debug, new)]
+struct CallRequest {
+    // flags:1
+    flags: Flags,
+    // ttl, tracing, service name, headers
+    fields: CallRequestFields,
+    // checksum type, checksum, args
+    args: CallArgs,
 }
 
 impl Codec for CallRequest {
     fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
         dst.put_u8(self.flags.bits());
-        dst.put_u32(self.ttl);
-        self.tracing.encode(dst)?;
-        encode_string(self.service, dst)?;
-        self.fields.encode(dst)?;
+        self.fields.encode(dst);
+        self.args.encode(dst)?;
         Ok(())
     }
 
     fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
         Ok(CallRequest::new(
             decode_bitflag(src.get_u8(), Flags::from_bits)?,
-            src.get_u32(),
+            CallRequestFields::decode(src)?,
+            CallArgs::decode(src)?,
+        ))
+    }
+}
+
+#[derive(Debug, new)]
+struct CallResponseFields {
+    // code:1
+    code: ResponseCode,
+    // tracing:25
+    tracing: Tracing,
+    // nh:1 (hk~1, hv~1){nh}
+    headers: HashMap<String, String>,
+}
+
+impl Codec for CallResponseFields {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+        dst.put_u8(self.code as u8);
+        self.tracing.encode(dst)?;
+        encode_headers(self.headers, dst)?;
+        Ok(())
+    }
+
+    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+        Ok(CallResponseFields::new(
+            decode_bitflag(src.get_u8(), ResponseCode::from_u8)?,
             Tracing::decode(src)?,
-            decode_string(src)?,
-            CallCommonFields::decode(src)?,
+            decode_headers(src)?,
         ))
     }
 }
@@ -201,29 +246,25 @@ impl Codec for CallRequest {
 struct CallResponse {
     // flags:1
     flags: Flags,
-    // code:1
-    code: ResponseCode,
-    // tracing:25
-    tracing: Tracing,
-    // common fields
-    fields: CallCommonFields,
+    // code, tracing, headers
+    fields: CallResponseFields,
+    // checksum type, checksum, args
+    args: CallArgs,
 }
 
 impl Codec for CallResponse {
     fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
         dst.put_u8(self.flags.bits());
-        dst.put_u8(self.code as u8);
-        self.tracing.encode(dst)?;
         self.fields.encode(dst)?;
+        self.args.encode(dst)?;
         Ok(())
     }
 
     fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
         Ok(CallResponse::new(
             decode_bitflag(src.get_u8(), Flags::from_bits)?,
-            decode_bitflag(src.get_u8(), ResponseCode::from_u8)?,
-            Tracing::decode(src)?,
-            CallCommonFields::decode(src)?,
+            CallResponseFields::decode(src)?,
+            CallArgs::decode(src)?,
         ))
     }
 }
@@ -233,20 +274,20 @@ pub struct CallContinue {
     // flags:1
     flags: Flags,
     // common fields
-    fields: CallCommonFields,
+    args: CallArgs,
 }
 
 impl Codec for CallContinue {
     fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
         dst.put_u8(self.flags.bits());
-        self.fields.encode(dst)?;
+        self.args.encode(dst)?;
         Ok(())
     }
 
     fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
         Ok(CallContinue::new(
             decode_bitflag(src.get_u8(), Flags::from_bits)?,
-            CallCommonFields::decode(src)?,
+            CallArgs::decode(src)?,
         ))
     }
 }

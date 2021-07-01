@@ -1,8 +1,10 @@
+use crate::channel::frames::headers::ArgSchemeValue;
 use crate::channel::frames::{TFrame, TFrameStream};
 use crate::channel::messages::*;
 use crate::channel::SubChannel;
 use crate::Error;
 use crate::TChannelError::FrameCodecError;
+use bytes::Bytes;
 use bytes::BytesMut;
 use futures::Stream;
 use std::collections::HashMap;
@@ -13,10 +15,28 @@ use tokio_util::codec::{Decoder, Encoder};
 #[derive(Default, Debug, Builder, Getters)]
 #[builder(pattern = "owned")]
 pub struct RawMessage {
-    base: BaseRequest,
+    arg1: Bytes,
+    arg2: Bytes,
+    arg3: Bytes,
 }
 
-impl Message for RawMessage {}
+impl Message for RawMessage {
+    fn arg_scheme() -> ArgSchemeValue {
+        ArgSchemeValue::Raw
+    }
+
+    fn arg1(&self) -> Bytes {
+        todo!()
+    }
+
+    fn arg2(&self) -> Bytes {
+        todo!()
+    }
+
+    fn arg3(&self) -> Bytes {
+        todo!()
+    }
+}
 
 impl Request for RawMessage {}
 
@@ -47,22 +67,5 @@ impl MessageChannel for SubChannel {
         host: SocketAddr,
     ) -> Result<Self::RES, crate::TChannelError> {
         self.send(request, host).await
-    }
-}
-
-impl Encoder<RawMessage> for MessageCodec {
-    type Error = TChannelError;
-
-    fn encode(&mut self, item: RawMessage, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        todo!()
-    }
-}
-
-impl Decoder for MessageCodec {
-    type Item = RawMessage;
-    type Error = TChannelError;
-
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        todo!()
     }
 }

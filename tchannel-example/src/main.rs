@@ -1,10 +1,10 @@
 use bytes::{BufMut, BytesMut};
 use futures::SinkExt;
 use std::collections::HashMap;
+use tchannel::channel::frames::headers::TransportHeader;
 use tchannel::channel::frames::payloads::*;
 use tchannel::channel::frames::*;
 use tchannel::channel::frames::{TFrame, TFrameIdCodec, Type};
-use tchannel::channel::messages::TransportHeader;
 use tchannel::Error;
 use tokio::net::TcpStream;
 use tokio_stream::StreamExt;

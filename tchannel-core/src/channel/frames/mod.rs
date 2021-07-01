@@ -1,3 +1,4 @@
+pub mod headers;
 pub mod payloads;
 
 use crate::TChannelError;

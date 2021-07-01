@@ -1,9 +1,9 @@
+use crate::channel::frames::headers::ArgSchemeValue;
 use crate::channel::messages::*;
+use bytes::Bytes;
 
 #[derive(Default, Debug)]
-pub struct ThriftMessage {
-    base: BaseRequest,
-}
+pub struct ThriftMessage {}
 
 impl TryFrom<TFrameStream> for ThriftMessage {
     type Error = TChannelError;
@@ -19,6 +19,22 @@ impl TryInto<TFrameStream> for ThriftMessage {
     }
 }
 
-impl Message for ThriftMessage {}
+impl Message for ThriftMessage {
+    fn arg_scheme() -> ArgSchemeValue {
+        ArgSchemeValue::Thrift
+    }
+
+    fn arg1(&self) -> Bytes {
+        todo!()
+    }
+
+    fn arg2(&self) -> Bytes {
+        todo!()
+    }
+
+    fn arg3(&self) -> Bytes {
+        todo!()
+    }
+}
 
 impl Request for ThriftMessage {}
