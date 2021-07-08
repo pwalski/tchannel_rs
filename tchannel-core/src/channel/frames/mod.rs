@@ -8,6 +8,7 @@ use std::pin::Pin;
 use tokio_util::codec::{Decoder, Encoder};
 
 pub const FRAME_HEADER_LENGTH: u16 = 16;
+pub const FRAME_MAX_LENGTH: u16 = u16::MAX - 1;
 pub const ZERO: u8 = 0;
 
 #[derive(Copy, Clone, Debug, FromPrimitive, PartialEq)]
@@ -105,9 +106,7 @@ impl Decoder for TFrameIdCodec {
         }
         let size = src.get_u16();
         if size < FRAME_HEADER_LENGTH {
-            return Err(TChannelError::FrameCodecError(
-                "Frame too short".to_string(),
-            ));
+            return Err(TChannelError::FrameCodecError("Frame too short".to_owned()));
         }
         let frame_type_bytes = src.get_u8();
         let frame_type = match num::FromPrimitive::from_u8(frame_type_bytes) {

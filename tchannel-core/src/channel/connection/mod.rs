@@ -177,7 +177,7 @@ impl Connection {
         frame_output.send(frame).await?;
         let response = frame_receiver.recv().await;
         frame_output.close().await;
-        response.ok_or_else(|| TChannelError::Error(String::from("Received no response")))
+        response.ok_or_else(|| TChannelError::Error("Received no response".to_owned()))
     }
 
     //TODO better name? pass output as an fn arg?
