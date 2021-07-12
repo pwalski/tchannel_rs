@@ -5,9 +5,9 @@ use bytes::Bytes;
 #[derive(Default, Debug)]
 pub struct ThriftMessage {}
 
-impl TryFrom<TFrameStream> for ThriftMessage {
+impl TryFrom<Vec<Bytes>> for ThriftMessage {
     type Error = TChannelError;
-    fn try_from(value: TFrameStream) -> Result<Self, Self::Error> {
+    fn try_from(value: Vec<Bytes>) -> Result<Self, Self::Error> {
         todo!()
     }
 }
@@ -24,15 +24,7 @@ impl Message for ThriftMessage {
         ArgSchemeValue::Thrift
     }
 
-    fn arg1(&self) -> Bytes {
-        todo!()
-    }
-
-    fn arg2(&self) -> Bytes {
-        todo!()
-    }
-
-    fn arg3(&self) -> Bytes {
+    fn args(self) -> Vec<Bytes> {
         todo!()
     }
 }

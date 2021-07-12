@@ -21,8 +21,8 @@ pub async fn main() -> Result<(), Error> {
 
 async fn run() -> Result<(), Error> {
     let mut tchannel = TChannel::new(ConnectionOptions::default())?;
-    let subchannel = tchannel.subchannel(String::from("sub_channel")).await?;
-    let request = RawMessageBuilder::default().build()?;
+    let subchannel = tchannel.subchannel("server".to_owned()).await?;
+    let request = RawMessage::new("pong".into(), "Marco".into(), "Ping!".into());
     let addr = SocketAddr::from_str("192.168.50.172:8888")?;
     debug!("sending");
     match subchannel.send(request, addr).await {

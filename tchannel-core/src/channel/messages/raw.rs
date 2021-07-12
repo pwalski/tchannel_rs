@@ -6,18 +6,22 @@ use crate::Error;
 use crate::TChannelError::FrameCodecError;
 use bytes::Bytes;
 use bytes::BytesMut;
-use futures::Stream;
+use futures::future::Ready;
+use futures::{Stream, StreamExt};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::future::Future;
 use tokio_util::codec::{Decoder, Encoder};
 
-#[derive(Default, Debug, Builder, Getters)]
+#[derive(Default, Debug, Builder, Getters, new)]
 #[builder(pattern = "owned")]
 pub struct RawMessage {
-    arg1: Bytes,
-    arg2: Bytes,
-    arg3: Bytes,
+    //arg1
+    endpoint: String,
+    //arg2
+    header: String,
+    //arg3
+    body: Bytes,
 }
 
 impl Message for RawMessage {
@@ -25,16 +29,8 @@ impl Message for RawMessage {
         ArgSchemeValue::Raw
     }
 
-    fn arg1(&self) -> Bytes {
-        todo!()
-    }
-
-    fn arg2(&self) -> Bytes {
-        todo!()
-    }
-
-    fn arg3(&self) -> Bytes {
-        todo!()
+    fn args(self) -> Vec<Bytes> {
+        Vec::from([self.endpoint.into(), self.header.into(), self.body])
     }
 }
 
@@ -42,10 +38,11 @@ impl Request for RawMessage {}
 
 impl Response for RawMessage {}
 
-impl TryFrom<TFrameStream> for RawMessage {
+impl TryFrom<Vec<Bytes>> for RawMessage {
     type Error = TChannelError;
-    fn try_from(stream: TFrameStream) -> Result<Self, Self::Error> {
-        todo!()
+    fn try_from(stream: Vec<Bytes>) -> Result<Self, Self::Error> {
+        println!("Ending");
+        Ok(RawMessage::new(String::new(), String::new(), Bytes::new()))
     }
 }
 

@@ -213,8 +213,8 @@ pub struct FrameOutput {
 impl FrameOutput {
     pub async fn send(&self, frame: TFrame) -> Result<(), TChannelError> {
         let frame = TFrameId::new(self.message_id, frame);
-        self.sender.send(frame).await?;
-        Ok(())
+        debug!("Passing frame {:?} to sender.", frame);
+        Ok(self.sender.send(frame).await?)
     }
 
     //TODO figure out how to automatically close it? impl Sink? do it on Deref?

@@ -3,7 +3,7 @@ pub mod payloads;
 
 use crate::TChannelError;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use futures::Stream;
+use futures::{Stream, TryStream};
 use std::pin::Pin;
 use tokio_util::codec::{Decoder, Encoder};
 

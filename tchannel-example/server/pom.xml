@@ -88,7 +88,7 @@
                                 <argument>-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005</argument>
                                 <argument>-classpath</argument>
                                 <classpath/>
-                                <argument>com.uber.tchannel.thrift.KeyValueServer</argument>
+                                <argument>com.uber.tchannel.basic.SyncRequest</argument>
                             </arguments>
                         </configuration>
                     </plugin>

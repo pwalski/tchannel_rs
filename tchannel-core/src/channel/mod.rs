@@ -3,7 +3,7 @@ pub mod frames;
 pub mod messages;
 
 use crate::channel::connection::{
-    ConnectionOptions, ConnectionPools, ConnectionPoolsBuilder, FrameOutput,
+    ConnectionOptions, ConnectionPools, ConnectionPoolsBuilder, FrameInput, FrameOutput,
 };
 use crate::channel::frames::headers::TransportHeader::CallerNameKey;
 use crate::channel::frames::headers::{ArgSchemeValue, TransportHeader};
@@ -18,12 +18,14 @@ use crate::handlers::RequestHandler;
 use crate::{Error, TChannelError};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::channel::oneshot::Sender;
+use futures::join;
+use futures::task::Poll;
 use futures::StreamExt;
 use futures::{future, TryStreamExt};
 use futures::{FutureExt, Stream};
 use log::{debug, error, info, warn};
 use std::collections::{HashMap, VecDeque};
-use std::convert::{TryFrom, TryInto};
+use std::convert::{Infallible, TryFrom, TryInto};
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -101,27 +103,47 @@ impl SubChannel {
         request: REQ,
         host: SocketAddr,
     ) -> Result<RES, crate::TChannelError> {
-        let frame_stream = self.create_frames(request)?;
-        //TODO link/join futures
-        let pool = self.connection_pools.get(host).await?;
-        let connection = pool.get().await?;
-        let (frame_output, frame_input) = connection.send_many().await;
-        Self::send_frames(frame_stream, frame_output); // handle failure?
-        let str = frame_input.map(|frame_id| frame_id.frame);
-        RES::try_from(Box::pin(str))
+        let (connection_res, frames_res) =
+            join!(self.connect(host), async { self.create_frames(request) });
+        let (frame_output, frame_input) = connection_res?;
+        Self::send_frames(frames_res?, frame_output).await?;
+
+        debug!("Waiting for response frames");
+        let stream = frame_input.map(|frame_id| frame_id.frame);
+        debug!("Reading response frames");
+        stream
+            .for_each(|frame| {
+                info!("Frame: {:?}", frame);
+                future::ready(())
+            })
+            .await;
+        debug!("Done");
+        // RES::try_from(Vec::new())
+
+        todo!()
     }
 
-    async fn send_frames(frame_stream: TFrameStream, frame_output: FrameOutput) -> JoinHandle<()> {
-        tokio::spawn(async move {
-            frame_stream
-                .then(|frame| frame_output.send(frame))
-                .inspect_err(|err| warn!("Failed to send frame. Error: {}", err))
-                .take_while(|res| future::ready(res.is_ok()));
-        })
+    async fn connect(&self, host: SocketAddr) -> Result<(FrameOutput, FrameInput), TChannelError> {
+        let pool = self.connection_pools.get(host).await?;
+        let connection = pool.get().await?;
+        Ok(connection.send_many().await)
+    }
+
+    async fn send_frames(
+        frames: TFrameStream,
+        frame_output: FrameOutput,
+    ) -> Result<(), TChannelError> {
+        debug!("Sending frames");
+        frames
+            .then(|frame| frame_output.send(frame))
+            .inspect_err(|err| error!("Failed to send frame {:?}", err))
+            .try_for_each(|res| future::ready(Ok(())))
+            .await
     }
 
     fn create_frames<REQ: Request>(&self, request: REQ) -> Result<TFrameStream, TChannelError> {
-        let mut args = Vec::from([request.arg3(), request.arg2(), request.arg1()]);
+        let mut args = request.args();
+        args.reverse();
 
         let mut request_fields = self.create_request_fields_bytes(REQ::arg_scheme())?;
         let payload_limit = Self::calculate_payload_limit(request_fields.len());
@@ -130,9 +152,11 @@ impl SubChannel {
 
         let mut call_frames = Vec::new();
         let call_request = CallFieldsEncoded::new(flag, request_fields, frame_args);
+        debug!("Creating call request {:?}", call_request);
         call_frames.push(TFrame::new(Type::CallRequest, call_request.encode_bytes()?));
 
         while !args.is_empty() {
+            debug!("Creating call continue");
             let payload_limit = Self::calculate_payload_limit(0);
             let frame_args = Self::create_frame_args(&mut args, payload_limit);
             let flag = Self::get_frame_flag(&args);
@@ -142,7 +166,7 @@ impl SubChannel {
                 call_continue.encode_bytes()?,
             ))
         }
-
+        debug!("Done! {} frames", call_frames.len());
         Ok(Box::pin(futures::stream::iter(call_frames)))
     }
 

@@ -38,12 +38,14 @@ public final class SyncRequest {
 
     public static void main(String[] args) throws Exception {
         TChannel server = createServer();
-        TChannel client = createClient();
+//        server.listen().channel().closeFuture().sync();
+//        TChannel client = createClient();
 
-        SubChannel subChannel = client.makeSubChannel("server");
+//        SubChannel subChannel = client.makeSubChannel("server");
 
         final long start = System.currentTimeMillis();
 
+        /*
         // send three requests
         for (int i = 0; i < 3; i++) {
             RawRequest request = new RawRequest.Builder("server", "pong")
@@ -70,19 +72,19 @@ public final class SyncRequest {
 
             System.out.println();
         }
+        */
 
         System.out.println(String.format("%nTime cost: %dms", System.currentTimeMillis() - start));
 
         // close channels asynchronously
         server.shutdown(false);
-        client.shutdown(false);
+//        client.shutdown(false);
     }
 
     protected static TChannel createServer() throws Exception {
 
         // create TChannel
         TChannel tchannel = new TChannel.Builder("server")
-            .setServerHost(InetAddress.getByName(null))
             .setServerPort(8888)
             .build();
 
@@ -113,12 +115,16 @@ public final class SyncRequest {
                                 .setBody("I feel bad ...")
                                 .build();
                         default:
-                            throw new UnsupportedOperationException("I feel very bad!");
+                            return new RawResponse.Builder(request)
+                                    .setTransportHeaders(request.getTransportHeaders())
+                                    .setHeader("Polo")
+                                    .setBody("Not again!")
+                                    .build();
                     }
                 }
             });
 
-        tchannel.listen();
+        tchannel.listen().channel().closeFuture().sync();
 
         return tchannel;
     }
