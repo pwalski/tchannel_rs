@@ -203,8 +203,8 @@ impl Codec for CallRequestFields {
     fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
         dst.put_u32(self.ttl);
         self.tracing.encode(dst)?;
-        encode_string(self.service, dst)?;
-        encode_headers(self.headers, dst)?;
+        encode_small_string(self.service, dst)?;
+        encode_small_headers(self.headers, dst)?;
         Ok(())
     }
 
@@ -212,8 +212,8 @@ impl Codec for CallRequestFields {
         Ok(CallRequestFields::new(
             src.get_u32(),
             Tracing::decode(src)?,
-            decode_string(src)?,
-            decode_headers(src)?,
+            decode_small_string(src)?,
+            decode_small_headers(src)?,
         ))
     }
 }
@@ -259,7 +259,7 @@ impl Codec for CallResponseFields {
     fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
         dst.put_u8(self.code as u8);
         self.tracing.encode(dst)?;
-        encode_headers(self.headers, dst)?;
+        encode_small_headers(self.headers, dst)?;
         Ok(())
     }
 
@@ -267,7 +267,7 @@ impl Codec for CallResponseFields {
         Ok(CallResponseFields::new(
             decode_bitflag(src.get_u8(), ResponseCode::from_u8)?,
             Tracing::decode(src)?,
-            decode_headers(src)?,
+            decode_small_headers(src)?,
         ))
     }
 }
@@ -400,7 +400,23 @@ fn encode_headers(
     headers: HashMap<String, String>,
     dst: &mut BytesMut,
 ) -> Result<(), TChannelError> {
-    dst.put_u16(headers.len() as u16);
+    encode_header_fields::<u16>(headers, dst, &BytesMut::put_u16, &encode_string)
+}
+
+fn encode_small_headers(
+    headers: HashMap<String, String>,
+    dst: &mut BytesMut,
+) -> Result<(), TChannelError> {
+    encode_header_fields::<u8>(headers, dst, &BytesMut::put_u8, &encode_small_string)
+}
+
+fn encode_header_fields<T: TryFrom<usize>>(
+    headers: HashMap<String, String>,
+    dst: &mut BytesMut,
+    encode_len_fn: &dyn Fn(&mut BytesMut, T) -> (),
+    encode_string: &dyn Fn(String, &mut BytesMut) -> Result<(), TChannelError>,
+) -> Result<(), TChannelError> {
+    encode_len(dst, headers.len(), encode_len_fn)?;
     for (headerKey, headerValue) in headers {
         encode_string(headerKey, dst)?;
         encode_string(headerValue, dst)?;
@@ -408,27 +424,27 @@ fn encode_headers(
     Ok(())
 }
 
-fn decode_headers(src: &mut Bytes) -> Result<HashMap<String, String>, FromUtf8Error> {
-    let len = src.get_u16();
+fn decode_headers(src: &mut Bytes) -> Result<HashMap<String, String>, TChannelError> {
+    decode_headers_field(src, &Bytes::get_u16, &decode_string)
+}
+
+fn decode_small_headers(src: &mut Bytes) -> Result<HashMap<String, String>, TChannelError> {
+    decode_headers_field(src, &Bytes::get_u8, &decode_small_string)
+}
+
+fn decode_headers_field<T: TryInto<usize>>(
+    src: &mut Bytes,
+    decode_len_fn: &dyn Fn(&mut Bytes) -> T,
+    decode_string_fn: &dyn Fn(&mut Bytes) -> Result<String, TChannelError>,
+) -> Result<HashMap<String, String>, TChannelError> {
+    let len = decode_len(src, decode_len_fn)?;
     let mut headers = HashMap::new();
     for _ in 0..len {
-        let key = decode_string(src)?;
-        let val = decode_string(src)?;
+        let key = decode_string_fn(src)?;
+        let val = decode_string_fn(src)?;
         headers.insert(key, val);
     }
     Ok(headers)
-}
-
-fn encode_string(value: String, dst: &mut BytesMut) -> Result<(), TChannelError> {
-    dst.put_u16(value.len() as u16);
-    dst.write_str(value.as_str())?;
-    Ok(())
-}
-
-fn decode_string(src: &mut Bytes) -> Result<String, FromUtf8Error> {
-    let len = src.get_u16();
-    let bytes = src.copy_to_bytes(len as usize);
-    String::from_utf8(bytes.chunk().to_vec())
 }
 
 fn encode_checksum(
@@ -514,4 +530,62 @@ fn decode_arg(src: &mut Bytes) -> Result<Option<Bytes>, TChannelError> {
             len => Ok(Some(src.split_to(len as usize))),
         },
     }
+}
+
+fn encode_string(value: String, dst: &mut BytesMut) -> Result<(), TChannelError> {
+    encode_string_field(value, dst, &BytesMut::put_u16)
+}
+
+fn encode_small_string(value: String, dst: &mut BytesMut) -> Result<(), TChannelError> {
+    encode_string_field(value, dst, &BytesMut::put_u8)
+}
+
+fn encode_string_field<T: TryFrom<usize>>(
+    value: String,
+    dst: &mut BytesMut,
+    encode_len_fn: &dyn Fn(&mut BytesMut, T) -> (),
+) -> Result<(), TChannelError> {
+    encode_len(dst, value.len(), encode_len_fn)?;
+    dst.write_str(value.as_str())?;
+    Ok(())
+}
+
+fn decode_string(src: &mut Bytes) -> Result<String, TChannelError> {
+    decode_string_field(src, &Bytes::get_u16)
+}
+fn decode_small_string(src: &mut Bytes) -> Result<String, TChannelError> {
+    decode_string_field(src, &Bytes::get_u8)
+}
+
+fn decode_string_field<T: Into<usize>>(
+    src: &mut Bytes,
+    get_len: &dyn Fn(&mut Bytes) -> T,
+) -> Result<String, TChannelError> {
+    let len = get_len(src);
+    let bytes = src.copy_to_bytes(len.into());
+    Ok(String::from_utf8(bytes.chunk().to_vec())?)
+}
+
+fn encode_len<T: TryFrom<usize>>(
+    dst: &mut BytesMut,
+    value: usize,
+    encode_len_fn: &dyn Fn(&mut BytesMut, T) -> (),
+) -> Result<(), TChannelError> {
+    Ok(encode_len_fn(
+        dst,
+        value
+            .try_into()
+            .map_err(|_| TChannelError::Error(format!("Failed to cast '{}' len.", value)))?, //TODO impl From for TChannelError
+    ))
+}
+
+fn decode_len<T: TryInto<usize>>(
+    src: &mut Bytes,
+    decode_len_fn: &dyn Fn(&mut Bytes) -> T,
+) -> Result<usize, TChannelError> {
+    Ok(
+        decode_len_fn(src)
+            .try_into()
+            .map_err(|_| TChannelError::Error(format!("Failed to cast len to usize.")))?, //TODO impl From for TChannelError
+    )
 }

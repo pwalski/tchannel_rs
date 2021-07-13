@@ -26,6 +26,7 @@ use crate::channel::frames::payloads::ErrorMsg;
 use crate::channel::frames::{TFrame, TFrameId, Type};
 use crate::TChannelError::{FrameCodecError, FrameError};
 use bb8::RunError;
+use std::convert::TryFrom;
 use std::string::FromUtf8Error;
 use thiserror::Error;
 use tokio::sync::mpsc::error::SendError;
@@ -92,5 +93,11 @@ impl From<TFrame> for TChannelError {
         FrameError(frame)
     }
 }
+
+// impl From<<TryFrom<usize, Error = Type>>::Error> for TChannelError {
+//     fn from(err: <TryFrom<usize, Error = Type>>::Error) -> Self {
+//         TChannelError::TryFromError(err)
+//     }
+// }
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
