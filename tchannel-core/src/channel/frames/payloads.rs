@@ -144,7 +144,6 @@ pub struct CallArgs {
 
 impl Codec for CallArgs {
     fn encode(mut self, dst: &mut BytesMut) -> Result<(), TChannelError> {
-        dst.put_u8(self.checksum_type as u8);
         encode_checksum(self.checksum_type, self.checksum, dst)?;
         encode_args(self.args, dst)?;
         Ok(())
