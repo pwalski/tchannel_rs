@@ -10,6 +10,8 @@ use std::string::FromUtf8Error;
 pub const PROTOCOL_VERSION: u16 = 2;
 pub const TRACING_HEADER_LENGTH: u8 = 25;
 pub const MAX_FRAME_ARGS: usize = 3;
+/// Length of arg length frame field (2 bytes, u16)
+pub const ARG_LEN_LEN: usize = 2;
 
 pub trait Codec: Sized {
     fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError>;
@@ -485,7 +487,7 @@ fn encode_args(args: Vec<Option<Bytes>>, dst: &mut BytesMut) -> Result<(), TChan
             None => dst.put_u16(0),
             Some(arg) => {
                 let len = arg.len();
-                if (dst.remaining() < len + 2) {
+                if (dst.remaining() < len + ARG_LEN_LEN) {
                     return Err(TChannelError::FrameCodecError(
                         "Not enough capacity to encode arg".to_owned(),
                     ));

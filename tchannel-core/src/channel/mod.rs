@@ -9,7 +9,7 @@ use crate::channel::frames::headers::TransportHeader::CallerNameKey;
 use crate::channel::frames::headers::{ArgSchemeValue, TransportHeader};
 use crate::channel::frames::payloads::{
     CallArgs, CallContinue, CallFieldsEncoded, CallRequest, CallRequestFields, ChecksumType, Codec,
-    Flags, TraceFlags, Tracing,
+    Flags, TraceFlags, Tracing, ARG_LEN_LEN,
 };
 use crate::channel::frames::{TFrame, TFrameStream, Type, FRAME_HEADER_LENGTH, FRAME_MAX_LENGTH};
 use crate::channel::messages::{Message, Request, Response};
@@ -103,8 +103,7 @@ impl SubChannel {
         request: REQ,
         host: SocketAddr,
     ) -> Result<RES, crate::TChannelError> {
-        let (connection_res, frames_res) =
-            join!(self.connect(host), async { self.create_frames(request) });
+        let (connection_res, frames_res) = join!(self.connect(host), self.create_frames(request));
         let (frame_output, frame_input) = connection_res?;
         Self::send_frames(frames_res?, frame_output).await?;
 
@@ -141,7 +140,10 @@ impl SubChannel {
             .await
     }
 
-    fn create_frames<REQ: Request>(&self, request: REQ) -> Result<TFrameStream, TChannelError> {
+    async fn create_frames<REQ: Request>(
+        &self,
+        request: REQ,
+    ) -> Result<TFrameStream, TChannelError> {
         let mut args = request.args();
         args.reverse();
 
@@ -189,12 +191,12 @@ impl SubChannel {
         let mut frame_args = Vec::with_capacity(3);
         let mut remaining_limit = payload_limit;
         while let Some(mut arg) = args.pop() {
-            let (status, arg_bytes) = fragment_arg(&mut arg, remaining_limit);
-            arg_bytes.map(|arg| match arg.len() {
+            let (status, frame_arg_bytes) = fragment_arg(&mut arg, remaining_limit);
+            frame_arg_bytes.map(|frame_arg| match frame_arg.len() {
                 0 => frame_args.push(None),
                 len => {
-                    remaining_limit = remaining_limit - len;
-                    frame_args.push(Some(arg));
+                    remaining_limit = remaining_limit - (len + ARG_LEN_LEN);
+                    frame_args.push(Some(frame_arg));
                 }
             });
             if status == Incomplete {
@@ -258,20 +260,17 @@ fn fragment_arg(arg: &mut Bytes, payload_limit: usize) -> (FragmentationStatus, 
     let src_remaining = arg.remaining();
     if src_remaining == 0 {
         (FragmentationStatus::Complete, None)
-    } else if let 0..=2 = payload_limit {
+    } else if let 0..=ARG_LEN_LEN = payload_limit {
         (FragmentationStatus::Incomplete, None)
-    } else if src_remaining + 2 > payload_limit {
-        let fragment = arg.split_to(payload_limit - 2);
-        let fragment_len = fragment.len() as u16;
-        let payload = Bytes::from([&fragment_len.to_be_bytes(), fragment.chunk()].concat());
-        (FragmentationStatus::Incomplete, Some(payload))
+    } else if src_remaining + ARG_LEN_LEN > payload_limit {
+        let fragment = arg.split_to(payload_limit - ARG_LEN_LEN);
+        (FragmentationStatus::Incomplete, Some(fragment))
     } else {
-        let arg_len = arg.len() as u16;
-        let payload = Bytes::from([&arg_len.to_be_bytes(), arg.chunk()].concat());
-        if (src_remaining + 2 == payload_limit) {
-            (FragmentationStatus::CompleteAtTheEnd, Some(payload))
+        let arg_bytes = arg.split_to(arg.len());
+        if (src_remaining + ARG_LEN_LEN == payload_limit) {
+            (FragmentationStatus::CompleteAtTheEnd, Some(arg_bytes))
         } else {
-            (FragmentationStatus::Complete, Some(payload))
+            (FragmentationStatus::Complete, Some(arg_bytes))
         }
     }
 }
