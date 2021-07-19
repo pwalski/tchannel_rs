@@ -24,6 +24,7 @@ pub mod handlers;
 
 use crate::channel::frames::payloads::ErrorMsg;
 use crate::channel::frames::{TFrame, TFrameId, Type};
+use crate::channel::messages::Response;
 use crate::TChannelError::{FrameCodecError, FrameError};
 use bb8::RunError;
 use std::convert::TryFrom;
@@ -74,6 +75,8 @@ pub enum TChannelError {
 
     #[error("Unexpected response: {0:?}")]
     UnexpectedResponseError(Type),
+    // #[error("Error response: {0:?}")]
+    // ErrorResponse(Box<Response>),
 }
 
 impl From<String> for TChannelError {

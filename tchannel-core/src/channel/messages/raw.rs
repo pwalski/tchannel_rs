@@ -4,13 +4,15 @@ use crate::channel::messages::*;
 use crate::channel::SubChannel;
 use crate::Error;
 use crate::TChannelError::FrameCodecError;
-use bytes::Bytes;
 use bytes::BytesMut;
+use bytes::{Buf, Bytes};
 use futures::future::Ready;
 use futures::{Stream, StreamExt};
-use std::collections::HashMap;
+use std::cell::RefCell;
+use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::future::Future;
+use std::string::FromUtf8Error;
 use tokio_util::codec::{Decoder, Encoder};
 
 #[derive(Default, Debug, Builder, Getters, new)]
@@ -23,6 +25,8 @@ pub struct RawMessage {
     //arg3
     body: Bytes,
 }
+
+impl RawMessage {}
 
 impl Message for RawMessage {
     fn arg_scheme() -> ArgSchemeValue {
@@ -41,17 +45,21 @@ impl Response for RawMessage {}
 //TODO use it or drop it
 impl TryFrom<Vec<Bytes>> for RawMessage {
     type Error = TChannelError;
-    fn try_from(stream: Vec<Bytes>) -> Result<Self, Self::Error> {
-        Ok(RawMessage::new(String::new(), String::new(), Bytes::new()))
+    fn try_from(mut args: Vec<Bytes>) -> Result<Self, Self::Error> {
+        let mut deq_args = VecDeque::from(args);
+        Ok(RawMessage::new(
+            bytes_to_string(deq_args.pop_front())?,
+            bytes_to_string(deq_args.pop_front())?,
+            deq_args.pop_front().unwrap_or_else(|| Bytes::new()),
+        ))
     }
 }
 
-//TODO use it or drop it
-impl TryInto<TFrameStream> for RawMessage {
-    type Error = TChannelError;
-    fn try_into(self) -> Result<TFrameStream, Self::Error> {
-        todo!()
-    }
+fn bytes_to_string(arg: Option<Bytes>) -> Result<String, FromUtf8Error> {
+    arg.map_or_else(
+        || Ok(String::new()),
+        |b| String::from_utf8(Vec::from(b.chunk())),
+    )
 }
 
 #[async_trait]
@@ -63,7 +71,7 @@ impl MessageChannel for SubChannel {
         &self,
         request: Self::REQ,
         host: SocketAddr,
-    ) -> Result<Self::RES, crate::TChannelError> {
+    ) -> Result<(ResponseCode, Self::RES), crate::TChannelError> {
         self.send(request, host).await
     }
 }

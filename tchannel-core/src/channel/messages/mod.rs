@@ -1,8 +1,10 @@
 use crate::channel::frames::headers::ArgSchemeValue;
+use crate::channel::frames::payloads::{CallResponse, ResponseCode};
 use crate::channel::frames::{TFrame, TFrameStream};
 use crate::TChannelError;
 use async_trait::async_trait;
 use bytes::Bytes;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
@@ -12,8 +14,6 @@ use strum_macros::ToString;
 pub mod fragment;
 pub mod raw;
 pub mod thrift;
-
-pub enum ResponseCode {}
 
 pub trait Message: Debug + Sized + Send {
     fn arg_scheme() -> ArgSchemeValue;
@@ -27,7 +27,11 @@ pub trait Response: Message + TryFrom<Vec<Bytes>, Error = TChannelError> {}
 #[async_trait]
 pub trait MessageChannel {
     type REQ: Request;
-    type RES: Response + TryFrom<Vec<Bytes>, Error = TChannelError>;
+    type RES: Response;
 
-    async fn send(&self, request: Self::REQ, host: SocketAddr) -> Result<Self::RES, TChannelError>;
+    async fn send(
+        &self,
+        request: Self::REQ,
+        host: SocketAddr,
+    ) -> Result<(ResponseCode, Self::RES), TChannelError>;
 }

@@ -7,14 +7,7 @@ pub struct ThriftMessage {}
 
 impl TryFrom<Vec<Bytes>> for ThriftMessage {
     type Error = TChannelError;
-    fn try_from(value: Vec<Bytes>) -> Result<Self, Self::Error> {
-        todo!()
-    }
-}
-
-impl TryInto<TFrameStream> for ThriftMessage {
-    type Error = TChannelError;
-    fn try_into(self) -> Result<TFrameStream, Self::Error> {
+    fn try_from(args: Vec<Bytes>) -> Result<Self, Self::Error> {
         todo!()
     }
 }

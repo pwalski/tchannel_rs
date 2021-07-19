@@ -2,7 +2,7 @@ use crate::channel::frames::{TFrame, Type};
 use crate::TChannelError;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use num_traits::FromPrimitive;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Write;
 use std::string::FromUtf8Error;
@@ -134,14 +134,18 @@ impl Codec for Init {
 }
 
 //TODO convert to builder and verify args length?
-#[derive(Debug, new)]
+#[derive(Debug, Getters, MutGetters, new)]
 pub struct CallArgs {
+    #[get = "pub"]
     // csumtype:1
     checksum_type: ChecksumType,
+    #[get = "pub"]
     // (csum:4){0,1}
     checksum: Option<u32>,
-    // arg1~2 arg2~2 arg3~2
-    args: Vec<Option<Bytes>>,
+    #[get_mut = "pub"]
+    #[get = "pub"]
+    /// arg1~2 arg2~2 arg3~2
+    pub args: VecDeque<Option<Bytes>>, //TODO consider using references
 }
 
 impl Codec for CallArgs {
@@ -246,14 +250,17 @@ impl Codec for CallRequest {
     }
 }
 
-#[derive(Debug, new)]
+#[derive(Debug, Getters, new)]
 pub struct CallResponseFields {
-    // code:1
-    code: ResponseCode,
-    // tracing:25
-    tracing: Tracing,
-    // nh:1 (hk~1, hv~1){nh}
-    headers: HashMap<String, String>,
+    #[get = "pub"]
+    /// code:1
+    pub code: ResponseCode,
+    #[get = "pub"]
+    /// tracing:25
+    pub tracing: Tracing,
+    #[get = "pub"]
+    /// nh:1 (hk~1, hv~1){nh}
+    pub headers: HashMap<String, String>,
 }
 
 impl Codec for CallResponseFields {
@@ -273,14 +280,18 @@ impl Codec for CallResponseFields {
     }
 }
 
-#[derive(Debug, new)]
+#[derive(Debug, Getters, MutGetters, new)]
 pub struct CallResponse {
-    // flags:1
-    flags: Flags,
-    // code, tracing, headers
-    fields: CallResponseFields,
-    // checksum type, checksum, args
-    args: CallArgs,
+    /// flags:1
+    #[get = "pub"]
+    pub flags: Flags,
+    #[get = "pub"]
+    /// code, tracing, headers
+    pub fields: CallResponseFields,
+    #[get = "pub"]
+    #[get_mut = "pub"]
+    /// checksum type, checksum, args
+    pub args: CallArgs,
 }
 
 impl Codec for CallResponse {
@@ -300,12 +311,15 @@ impl Codec for CallResponse {
     }
 }
 
-#[derive(Debug, new)]
+#[derive(Debug, Getters, MutGetters, new)]
 pub struct CallContinue {
+    #[get = "pub"]
     // flags:1
     flags: Flags,
+    #[get = "pub"]
+    #[get_mut = "pub"]
     // common fields
-    args: CallArgs,
+    pub args: CallArgs,
 }
 
 impl Codec for CallContinue {
@@ -474,7 +488,7 @@ fn decode_bitflag<T, F: Fn(u8) -> Option<T>>(byte: u8, decoder: F) -> Result<T, 
     decoder(byte).ok_or_else(|| TChannelError::FrameCodecError(format!("Unknown flag: {}", byte)))
 }
 
-fn encode_args(args: Vec<Option<Bytes>>, dst: &mut BytesMut) -> Result<(), TChannelError> {
+fn encode_args(args: VecDeque<Option<Bytes>>, dst: &mut BytesMut) -> Result<(), TChannelError> {
     let args_len = args.len();
     if args_len == 0 || args_len > MAX_FRAME_ARGS {
         return Err(TChannelError::FrameCodecError(format!(
@@ -500,15 +514,15 @@ fn encode_args(args: Vec<Option<Bytes>>, dst: &mut BytesMut) -> Result<(), TChan
     Ok(())
 }
 
-fn decode_args(src: &mut Bytes) -> Result<Vec<Option<Bytes>>, TChannelError> {
+fn decode_args(src: &mut Bytes) -> Result<VecDeque<Option<Bytes>>, TChannelError> {
     if src.remaining() == 0 {
         return Err(TChannelError::FrameCodecError(
             "Frame missing args".to_owned(),
         ));
     }
-    let mut args = Vec::new();
+    let mut args = VecDeque::new();
     while !src.is_empty() && args.len() < MAX_FRAME_ARGS {
-        args.push(decode_arg(src)?);
+        args.push_back(decode_arg(src)?);
     }
     if !src.is_empty() {
         return Err(TChannelError::FrameCodecError(
@@ -525,9 +539,10 @@ fn decode_arg(src: &mut Bytes) -> Result<Option<Bytes>, TChannelError> {
         )),
         remaining => match src.get_u16() {
             0 => Ok(None),
-            len if len > (remaining as u16 - 2) => Err(TChannelError::FrameCodecError(
-                "Wrong arg length".to_owned(),
-            )),
+            len if len > (remaining as u16 - 2) => Err(TChannelError::FrameCodecError(format!(
+                "Wrong arg length: {}",
+                len
+            ))),
             len => Ok(Some(src.split_to(len as usize))),
         },
     }

@@ -173,21 +173,14 @@ impl Connection {
     }
 
     pub async fn send_one(&self, frame: TFrame) -> Result<TFrameId, TChannelError> {
-        let (frame_output, mut frame_receiver) = self.send().await;
+        let (frame_output, mut frame_receiver) = self.new_message_io().await;
         frame_output.send(frame).await?;
         let response = frame_receiver.recv().await;
         frame_output.close().await;
         response.ok_or_else(|| TChannelError::Error("Received no response".to_owned()))
     }
 
-    //TODO better name? pass output as an fn arg?
-    pub async fn send_many(&self) -> (FrameOutput, FrameInput) {
-        let (frame_output, mut frame_receiver) = self.send().await;
-        let receiver_stream = ReceiverStream::new(frame_receiver);
-        (frame_output, receiver_stream)
-    }
-
-    async fn send(&self) -> (FrameOutput, Receiver<TFrameId>) {
+    pub async fn new_message_io(&self) -> (FrameOutput, FrameInput) {
         let message_id = self.next_message_id();
         let (sender, mut receiver) = mpsc::channel::<TFrameId>(10); //TODO connfigure
         self.pending_ids.add(message_id.clone(), sender).await;
@@ -201,7 +194,7 @@ impl Connection {
     }
 }
 
-pub type FrameInput = ReceiverStream<TFrameId>;
+pub type FrameInput = Receiver<TFrameId>;
 
 #[derive(Getters, new)]
 pub struct FrameOutput {
@@ -341,7 +334,7 @@ impl ConnectionManager {
         let mut frame_id = Self::init_handshake(&connection).await?;
         match frame_id.frame().frame_type() {
             Type::InitResponse => {
-                let init = Init::decode(frame_id.frame_mut().payload_mut())?;
+                let init = Init::decode(frame_id.frame.payload_mut())?;
                 debug!("Received Init response: {:?}", init);
                 match *init.version() {
                     PROTOCOL_VERSION => Ok(connection),
@@ -352,7 +345,7 @@ impl ConnectionManager {
                 }
             }
             Type::Error => {
-                let error = ErrorMsg::decode(frame_id.frame_mut().payload_mut())?;
+                let error = ErrorMsg::decode(frame_id.frame.payload_mut())?;
                 debug!("Received error response {:?}", error);
                 return Err(TChannelError::ResponseError(error));
             }

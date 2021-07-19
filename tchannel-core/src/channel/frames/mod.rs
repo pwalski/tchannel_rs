@@ -68,7 +68,6 @@ impl TFrame {
 pub struct TFrameId {
     #[get = "pub"]
     id: u32,
-    #[get_mut = "pub"]
     #[get = "pub"]
     pub frame: TFrame,
 }

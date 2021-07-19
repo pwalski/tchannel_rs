@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
+use strum_macros::EnumString;
 use strum_macros::ToString;
 
 #[derive(ToString, Debug, PartialEq, Eq, Hash)]
@@ -22,7 +23,7 @@ pub enum TransportHeader {
     ShardKeyKey,
 }
 
-#[derive(ToString, Debug)]
+#[derive(ToString, Debug, EnumString)]
 pub enum ArgSchemeValue {
     #[strum(serialize = "raw")]
     Raw,
