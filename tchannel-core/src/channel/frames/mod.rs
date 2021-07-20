@@ -3,7 +3,7 @@ pub mod payloads;
 
 use crate::TChannelError;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use futures::{Stream, TryStream};
+use futures::{Stream};
 use std::pin::Pin;
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -122,8 +122,8 @@ impl Decoder for TFrameIdCodec {
         src.advance(8);
         let payload = src.split_to((size - FRAME_HEADER_LENGTH) as usize).freeze();
         let frame = TFrame {
-            frame_type: frame_type,
-            payload: payload,
+            frame_type,
+            payload,
         };
         Ok(Some(TFrameId { id, frame }))
     }

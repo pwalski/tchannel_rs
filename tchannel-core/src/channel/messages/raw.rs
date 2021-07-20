@@ -1,19 +1,19 @@
 use crate::channel::frames::headers::ArgSchemeValue;
-use crate::channel::frames::{TFrame, TFrameStream};
+
 use crate::channel::messages::*;
 use crate::channel::SubChannel;
-use crate::Error;
-use crate::TChannelError::FrameCodecError;
-use bytes::BytesMut;
+
+
+
 use bytes::{Buf, Bytes};
-use futures::future::Ready;
-use futures::{Stream, StreamExt};
-use std::cell::RefCell;
-use std::collections::{HashMap, VecDeque};
-use std::convert::TryInto;
-use std::future::Future;
+
+
+
+use std::collections::{VecDeque};
+
+
 use std::string::FromUtf8Error;
-use tokio_util::codec::{Decoder, Encoder};
+
 
 #[derive(Default, Debug, Builder, Getters, new)]
 #[builder(pattern = "owned")]
@@ -45,12 +45,12 @@ impl Response for RawMessage {}
 //TODO use it or drop it
 impl TryFrom<Vec<Bytes>> for RawMessage {
     type Error = TChannelError;
-    fn try_from(mut args: Vec<Bytes>) -> Result<Self, Self::Error> {
+    fn try_from(args: Vec<Bytes>) -> Result<Self, Self::Error> {
         let mut deq_args = VecDeque::from(args);
         Ok(RawMessage::new(
             bytes_to_string(deq_args.pop_front())?,
             bytes_to_string(deq_args.pop_front())?,
-            deq_args.pop_front().unwrap_or_else(|| Bytes::new()),
+            deq_args.pop_front().unwrap_or_else(Bytes::new),
         ))
     }
 }

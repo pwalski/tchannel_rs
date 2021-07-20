@@ -5,40 +5,29 @@ pub mod messages;
 use crate::channel::connection::{
     ConnectionOptions, ConnectionPools, ConnectionPoolsBuilder, FrameInput, FrameOutput,
 };
-use crate::channel::frames::headers::TransportHeader::CallerNameKey;
-use crate::channel::frames::headers::{ArgSchemeValue, TransportHeader};
+
 use crate::channel::frames::payloads::ResponseCode;
-use crate::channel::frames::payloads::{
-    CallArgs, CallContinue, CallFieldsEncoded, CallRequest, CallRequestFields, CallResponse,
-    ChecksumType, Codec, Flags, TraceFlags, Tracing, ARG_LEN_LEN,
-};
-use crate::channel::frames::Type::CallResponseContinue;
-use crate::channel::frames::{
-    TFrame, TFrameId, TFrameStream, Type, FRAME_HEADER_LENGTH, FRAME_MAX_LENGTH,
-};
+
+use crate::channel::frames::TFrameStream;
 use crate::channel::messages::defragmenting::Defragmenter;
 use crate::channel::messages::fragmenting::Fragmenter;
-use crate::channel::messages::{Message, Request, Response};
+use crate::channel::messages::{Request, Response};
 use crate::handlers::RequestHandler;
-use crate::{Error, TChannelError};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
-use futures::channel::oneshot::Sender;
+use crate::TChannelError;
+
 use futures::join;
-use futures::task::Poll;
+
+use futures::FutureExt;
 use futures::StreamExt;
 use futures::{future, TryStreamExt};
-use futures::{FutureExt, Stream};
-use log::{debug, error, info, warn};
-use std::collections::{HashMap, VecDeque};
-use std::convert::{Infallible, TryFrom, TryInto};
+use log::{debug, error};
+use std::collections::HashMap;
+
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicU32, Ordering};
+
 use std::sync::Arc;
-use tokio::net::TcpStream;
-use tokio::net::ToSocketAddrs;
+
 use tokio::sync::RwLock;
-use tokio::task::JoinHandle;
-use tokio_util::codec::{Decoder, Encoder, Framed};
 
 pub struct TChannel {
     subchannels: RwLock<HashMap<String, Arc<SubChannel>>>,
@@ -99,8 +88,7 @@ pub struct SubChannel {
 
 impl SubChannel {
     pub fn register<HANDLER>(&mut self, handler_name: &str, handler: HANDLER) -> &Self {
-        //TODO
-        self
+        unimplemented!()
     }
 
     async fn send<REQ: Request, RES: Response>(
@@ -112,11 +100,11 @@ impl SubChannel {
             self.connect(host),
             Fragmenter::new(request, self.service_name.clone()).create_frames(),
         );
-        let (frames_out, mut frames_in) = connection_res?;
+        let (frames_out, frames_in) = connection_res?;
         send_frames(frames_res?, &frames_out).await?;
         let response = Defragmenter::new(frames_in).read_response().await;
         frames_out.close().await; //TODO ugly
-        return response;
+        response
     }
 
     async fn connect(&self, host: SocketAddr) -> Result<(FrameOutput, FrameInput), TChannelError> {
@@ -131,6 +119,6 @@ async fn send_frames(frames: TFrameStream, frames_out: &FrameOutput) -> Result<(
     frames
         .then(|frame| frames_out.send(frame))
         .inspect_err(|err| error!("Failed to send frame {:?}", err))
-        .try_for_each(|res| future::ready(Ok(())))
+        .try_for_each(|_res| future::ready(Ok(())))
         .await
 }

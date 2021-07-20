@@ -1,14 +1,15 @@
-use crate::channel::frames::{TFrame, Type};
 use crate::TChannelError;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use num_traits::FromPrimitive;
 use std::collections::{HashMap, VecDeque};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Write;
-use std::string::FromUtf8Error;
 
+/// Supported TChannel protocol version
 pub const PROTOCOL_VERSION: u16 = 2;
 pub const TRACING_HEADER_LENGTH: u8 = 25;
+/// According to protocol frames have arg1, arg2, arg3.
+/// Implementation uses Vec of Bytes with length 3.
 pub const MAX_FRAME_ARGS: usize = 3;
 /// Length of arg length frame field (2 bytes, u16)
 pub const ARG_LEN_LEN: usize = 2;
@@ -43,25 +44,25 @@ pub enum ResponseCode {
 
 #[derive(Copy, Clone, Debug, FromPrimitive, ToPrimitive)]
 pub enum ErrorCode {
-    // Not a valid value for code. Do not use.
+    /// Not a valid value for code. Do not use.
     Invalid = 0x00,
-    // No nodes responded successfully within the ttl deadline.
+    /// No nodes responded successfully within the ttl deadline.
     Timeout = 0x01,
-    // Request was cancelled with a cancel message.
+    /// Request was cancelled with a cancel message.
     Cancelled = 0x02,
-    // 	Node is too busy, this request is safe to retry elsewhere if desired.
+    /// Node is too busy, this request is safe to retry elsewhere if desired.
     Busy = 0x03,
-    // Node declined request for reasons other than load.
+    /// Node declined request for reasons other than load.
     Declined = 0x04,
-    // Request resulted in an unexpected error. The request may have been completed before the error.
+    /// Request resulted in an unexpected error. The request may have been completed before the error.
     UnexpectedError = 0x05,
-    // Request args do not match expectations, request will never be satisfied, do not retry.
+    /// Request args do not match expectations, request will never be satisfied, do not retry.
     BadRequest = 0x06,
-    // A network error (e.g. socket error) occurred.
+    /// A network error (e.g. socket error) occurred.
     NetworkError = 0x07,
-    // A relay on the network declined to forward the request to an unhealthy node, do not retry.
+    /// A relay on the network declined to forward the request to an unhealthy node, do not retry.
     Unhealthy = 0x08,
-    // Connection will close after this frame. message ID of this frame should be 0xFFFFFFFF.
+    /// Connection will close after this frame. message ID of this frame should be 0xFFFFFFFF.
     FatalProtocolError = 0xff,
 }
 
@@ -89,7 +90,7 @@ pub struct Tracing {
 }
 
 impl Codec for Tracing {
-    fn encode(mut self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
         dst.put_u64(self.span_id);
         dst.put_u64(self.parent_id);
         dst.put_u64(self.trace_id);
@@ -137,10 +138,10 @@ impl Codec for Init {
 #[derive(Debug, Getters, MutGetters, new)]
 pub struct CallArgs {
     #[get = "pub"]
-    // csumtype:1
+    /// csumtype:1
     checksum_type: ChecksumType,
     #[get = "pub"]
-    // (csum:4){0,1}
+    /// (csum:4){0,1}
     checksum: Option<u32>,
     #[get_mut = "pub"]
     #[get = "pub"]
@@ -149,7 +150,7 @@ pub struct CallArgs {
 }
 
 impl Codec for CallArgs {
-    fn encode(mut self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
         encode_checksum(self.checksum_type, self.checksum, dst)?;
         encode_args(self.args, dst)?;
         Ok(())
@@ -167,11 +168,11 @@ impl Codec for CallArgs {
 
 #[derive(Debug, new)]
 pub struct CallFieldsEncoded {
-    // flags:1
+    /// flags:1
     flags: Flags,
-    // ttl, tracing, service name, headers
+    /// ttl, tracing, service name, headers
     fields: Bytes,
-    // checksum type, checksum, args
+    /// checksum type, checksum, args
     args: CallArgs,
 }
 
@@ -194,13 +195,13 @@ impl Codec for CallFieldsEncoded {
 
 #[derive(Debug, new)]
 pub struct CallRequestFields {
-    // ttl:4
+    /// ttl:4
     ttl: u32,
-    // tracing:25
+    /// tracing:25
     tracing: Tracing,
-    // service~1
+    /// service~1
     service: String,
-    // nh:1 (hk~1, hv~1){nh}
+    /// nh:1 (hk~1, hv~1){nh}
     headers: HashMap<String, String>,
 }
 
@@ -225,11 +226,11 @@ impl Codec for CallRequestFields {
 
 #[derive(Debug, new)]
 pub struct CallRequest {
-    // flags:1
+    /// flags:1
     flags: Flags,
-    // ttl, tracing, service name, headers
+    /// ttl, tracing, service name, headers
     fields: CallRequestFields,
-    // checksum type, checksum, args
+    /// checksum type, checksum, args
     args: CallArgs,
 }
 
@@ -314,11 +315,11 @@ impl Codec for CallResponse {
 #[derive(Debug, Getters, MutGetters, new)]
 pub struct CallContinue {
     #[get = "pub"]
-    // flags:1
+    /// flags:1
     flags: Flags,
     #[get = "pub"]
     #[get_mut = "pub"]
-    // common fields
+    /// common fields
     pub args: CallArgs,
 }
 
@@ -339,9 +340,9 @@ impl Codec for CallContinue {
 
 #[derive(Debug, new)]
 pub struct Cancel {
-    // ttl:4
+    /// ttl:4
     ttl: u32,
-    // tracing:25
+    /// tracing:25
     tracing: Tracing,
     why: String,
 }
@@ -365,9 +366,9 @@ impl Codec for Cancel {
 
 #[derive(Debug, new)]
 pub struct Claim {
-    // ttl:4
+    /// ttl:4
     ttl: u32,
-    // tracing:25
+    /// tracing:25
     tracing: Tracing,
 }
 
@@ -428,7 +429,7 @@ fn encode_small_headers(
 fn encode_header_fields<T: TryFrom<usize>>(
     headers: HashMap<String, String>,
     dst: &mut BytesMut,
-    encode_len_fn: &dyn Fn(&mut BytesMut, T) -> (),
+    encode_len_fn: &dyn Fn(&mut BytesMut, T),
     encode_string: &dyn Fn(String, &mut BytesMut) -> Result<(), TChannelError>,
 ) -> Result<(), TChannelError> {
     encode_len(dst, headers.len(), encode_len_fn)?;
@@ -501,7 +502,7 @@ fn encode_args(args: VecDeque<Option<Bytes>>, dst: &mut BytesMut) -> Result<(), 
             None => dst.put_u16(0),
             Some(arg) => {
                 let len = arg.len();
-                if (dst.remaining() < len + ARG_LEN_LEN) {
+                if dst.remaining() < len + ARG_LEN_LEN {
                     return Err(TChannelError::FrameCodecError(
                         "Not enough capacity to encode arg".to_owned(),
                     ));
@@ -559,7 +560,7 @@ fn encode_small_string(value: String, dst: &mut BytesMut) -> Result<(), TChannel
 fn encode_string_field<T: TryFrom<usize>>(
     value: String,
     dst: &mut BytesMut,
-    encode_len_fn: &dyn Fn(&mut BytesMut, T) -> (),
+    encode_len_fn: &dyn Fn(&mut BytesMut, T),
 ) -> Result<(), TChannelError> {
     encode_len(dst, value.len(), encode_len_fn)?;
     dst.write_str(value.as_str())?;
@@ -585,23 +586,22 @@ fn decode_string_field<T: Into<usize>>(
 fn encode_len<T: TryFrom<usize>>(
     dst: &mut BytesMut,
     value: usize,
-    encode_len_fn: &dyn Fn(&mut BytesMut, T) -> (),
+    encode_len_fn: &dyn Fn(&mut BytesMut, T),
 ) -> Result<(), TChannelError> {
-    Ok(encode_len_fn(
+    encode_len_fn(
         dst,
         value
             .try_into()
             .map_err(|_| TChannelError::Error(format!("Failed to cast '{}' len.", value)))?, //TODO impl From for TChannelError
-    ))
+    );
+    Ok(())
 }
 
 fn decode_len<T: TryInto<usize>>(
     src: &mut Bytes,
     decode_len_fn: &dyn Fn(&mut Bytes) -> T,
 ) -> Result<usize, TChannelError> {
-    Ok(
-        decode_len_fn(src)
-            .try_into()
-            .map_err(|_| TChannelError::Error(format!("Failed to cast len to usize.")))?, //TODO impl From for TChannelError
-    )
+    decode_len_fn(src)
+        .try_into()
+        .map_err(|_| TChannelError::Error("Failed to cast len to usize.".to_string()))
 }

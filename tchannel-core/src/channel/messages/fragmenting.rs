@@ -24,7 +24,7 @@ impl<REQ: Request> Fragmenter<REQ> {
         let mut args = self.request.args();
         args.reverse();
 
-        let mut request_fields = create_request_fields_bytes(REQ::arg_scheme(), self.service_name)?;
+        let request_fields = create_request_fields_bytes(REQ::arg_scheme(), self.service_name)?;
         let payload_limit = calculate_payload_limit(request_fields.len());
         let frame_args = create_frame_args(&mut args, payload_limit);
         let flag = get_frame_flag(&args);
@@ -66,7 +66,7 @@ fn create_request_fields_bytes(
 ) -> Result<Bytes, TChannelError> {
     let mut bytes = BytesMut::new();
     create_request_fields(arg_scheme, service_name).encode(&mut bytes)?;
-    return Ok(Bytes::from(bytes));
+    Ok(Bytes::from(bytes))
 }
 
 fn create_request_fields(arg_scheme: ArgSchemeValue, service_name: String) -> CallRequestFields {
@@ -90,7 +90,7 @@ fn create_frame_args_vec(args: &mut Vec<Bytes>, payload_limit: usize) -> VecDequ
         frame_arg_bytes.map(|frame_arg| match frame_arg.len() {
             0 => frame_args.push_back(None),
             len => {
-                remaining_limit = remaining_limit - (len + ARG_LEN_LEN);
+                remaining_limit -= len + ARG_LEN_LEN;
                 frame_args.push_back(Some(frame_arg));
             }
         });
@@ -128,7 +128,7 @@ fn create_headers(arg_scheme: ArgSchemeValue, service_name: String) -> HashMap<S
         arg_scheme.to_string(),
     );
     headers.insert(CallerNameKey.to_string(), service_name);
-    return headers;
+    headers
 }
 
 fn fragment_arg(arg: &mut Bytes, payload_limit: usize) -> (FragmentationStatus, Option<Bytes>) {
@@ -142,7 +142,7 @@ fn fragment_arg(arg: &mut Bytes, payload_limit: usize) -> (FragmentationStatus, 
         (FragmentationStatus::Incomplete, Some(fragment))
     } else {
         let arg_bytes = arg.split_to(arg.len());
-        if (src_remaining + ARG_LEN_LEN == payload_limit) {
+        if src_remaining + ARG_LEN_LEN == payload_limit {
             (FragmentationStatus::CompleteAtTheEnd, Some(arg_bytes))
         } else {
             (FragmentationStatus::Complete, Some(arg_bytes))

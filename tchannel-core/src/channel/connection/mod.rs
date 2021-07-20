@@ -8,31 +8,31 @@ use bb8::{ErrorSink, ManageConnection, Pool, PooledConnection, RunError};
 use bytes::BytesMut;
 use core::time::Duration;
 use futures::prelude::*;
-use futures::stream::{self, Chunks, Iter};
-use futures::{self, SinkExt, TryStreamExt};
+
+use futures::{self, SinkExt};
 use futures::{future, StreamExt};
-use log::{debug, error, info, warn};
-use std::cell::{Cell, RefCell};
+use log::{debug, error};
+
 use std::collections::HashMap;
-use std::error::Error;
+
 use std::fmt::Debug;
-use std::future::Future;
+
 use std::net::SocketAddr;
-use std::ops::Deref;
-use std::pin::Pin;
-use std::process::Output;
-use std::rc::Rc;
+
+
+
+
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
-use std::task::{Context, Poll};
-use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf, ReadHalf, WriteHalf};
+
+use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
-use tokio::net::ToSocketAddrs;
+
 use tokio::sync::mpsc;
-use tokio::sync::mpsc::error::SendError;
+
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::RwLock;
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::{Mutex};
 use tokio::task::JoinHandle;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::codec::{FramedRead, FramedWrite};
@@ -68,8 +68,8 @@ impl PendingIds {
     }
 
     pub async fn respond(&self, response: TFrameId) -> Result<(), TChannelError> {
-        let id = response.id().clone();
-        let mut channels = self.channels.read().await;
+        let id = *response.id();
+        let channels = self.channels.read().await;
         if let Some(sender) = channels.get(&id) {
             return Ok(sender.send(response).await?);
         }
@@ -125,7 +125,7 @@ impl ConnectionPools {
                 .await?,
         );
         pools.insert(addr, pool.clone());
-        return Ok(pool);
+        Ok(pool)
     }
 }
 
@@ -161,12 +161,12 @@ impl Connection {
         buffer_size: usize,
     ) -> Result<Connection, TChannelError> {
         debug!("Connecting to {}", addr);
-        let mut tcpStream = TcpStream::connect(addr).await?;
+        let tcpStream = TcpStream::connect(addr).await?;
         let (read, write) = tcpStream.into_split();
-        let mut framed_read = FramedRead::new(read, TFrameIdCodec {});
-        let mut framed_write = FramedWrite::new(write, TFrameIdCodec {});
+        let framed_read = FramedRead::new(read, TFrameIdCodec {});
+        let framed_write = FramedWrite::new(write, TFrameIdCodec {});
         let (sender, receiver) = mpsc::channel::<TFrameId>(buffer_size);
-        let mut connection = ConnectionBuilder::default().sender(sender).build()?;
+        let connection = ConnectionBuilder::default().sender(sender).build()?;
         FrameReceiver::spawn(framed_read, connection.pending_ids.clone());
         FrameSender::spawn(framed_write, receiver, buffer_size);
         Ok(connection)
@@ -182,8 +182,8 @@ impl Connection {
 
     pub async fn new_message_io(&self) -> (FrameOutput, FrameInput) {
         let message_id = self.next_message_id();
-        let (sender, mut receiver) = mpsc::channel::<TFrameId>(10); //TODO connfigure
-        self.pending_ids.add(message_id.clone(), sender).await;
+        let (sender, receiver) = mpsc::channel::<TFrameId>(10); //TODO connfigure
+        self.pending_ids.add(message_id, sender).await;
         let frame_output =
             FrameOutput::new(message_id, self.sender.clone(), self.pending_ids.clone());
         (frame_output, receiver)
@@ -227,7 +227,7 @@ impl FrameSender {
         frame_receiver: tokio::sync::mpsc::Receiver<TFrameId>,
         buffer_size: usize,
     ) -> JoinHandle<()> {
-        let mut frame_sender = FrameSender {
+        let frame_sender = FrameSender {
             framed_write: Arc::new(Mutex::new(framed_write)),
             buffer_size,
         };
@@ -271,7 +271,7 @@ impl FrameReceiver {
         framed_read: FramedRead<OwnedReadHalf, TFrameIdCodec>,
         pending_ids: Arc<PendingIds>,
     ) -> JoinHandle<()> {
-        let mut frame_receiver = FrameReceiver { pending_ids };
+        let frame_receiver = FrameReceiver { pending_ids };
         tokio::spawn(async move {
             frame_receiver
                 .run(framed_read)
@@ -318,12 +318,12 @@ impl bb8::ManageConnection for ConnectionManager {
         Self::verify(connection).await
     }
 
-    async fn is_valid(&self, conn: &mut PooledConnection<'_, Self>) -> Result<(), Self::Error> {
+    async fn is_valid(&self, _conn: &mut PooledConnection<'_, Self>) -> Result<(), Self::Error> {
         error!("Is valid?");
         Ok(())
     }
 
-    fn has_broken(&self, conn: &mut Self::Connection) -> bool {
+    fn has_broken(&self, _conn: &mut Self::Connection) -> bool {
         error!("Has broken?");
         false
     }
@@ -347,9 +347,9 @@ impl ConnectionManager {
             Type::Error => {
                 let error = ErrorMsg::decode(frame_id.frame.payload_mut())?;
                 debug!("Received error response {:?}", error);
-                return Err(TChannelError::ResponseError(error));
+                Err(TChannelError::ResponseError(error))
             }
-            other_type => return Err(TChannelError::UnexpectedResponseError(*other_type)),
+            other_type => Err(TChannelError::UnexpectedResponseError(*other_type)),
         }
     }
 

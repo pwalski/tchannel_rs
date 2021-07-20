@@ -1,5 +1,5 @@
 use crate::channel::connection::FrameInput;
-use crate::channel::frames::headers::{ArgSchemeValue, TransportHeader};
+use crate::channel::frames::headers::{TransportHeader};
 use crate::channel::frames::payloads::{
     CallArgs, CallContinue, CallResponse, ChecksumType, Codec, Flags, ResponseCode,
 };
@@ -114,7 +114,7 @@ impl ArgsDefragmenter {
             return;
         } else if let Some(arg) = frame_args.pop_front().unwrap() {
             // First frame arg might be continuation of arg from previous frame
-            let mut previous_arg = self.args.pop().ok_or_else(|| BytesMut::new()).unwrap();
+            let mut previous_arg = self.args.pop().ok_or_else(BytesMut::new).unwrap();
             previous_arg.put(arg);
             self.args.push(previous_arg);
         } else {
