@@ -11,7 +11,8 @@ use std::fmt::Debug;
 use std::net::SocketAddr;
 use strum_macros::ToString;
 
-pub mod fragment;
+pub mod defragmenting;
+pub mod fragmenting;
 pub mod raw;
 pub mod thrift;
 
