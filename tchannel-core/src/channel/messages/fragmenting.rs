@@ -14,12 +14,12 @@ use bytes::{Bytes, BytesMut};
 use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug, new)]
-pub struct MessageFragmenter<REQ: Request> {
+pub struct Fragmenter<REQ: Request> {
     request: REQ,
     service_name: String,
 }
 
-impl<REQ: Request> MessageFragmenter<REQ> {
+impl<REQ: Request> Fragmenter<REQ> {
     pub async fn create_frames(self) -> Result<TFrameStream, TChannelError> {
         let mut args = self.request.args();
         args.reverse();
