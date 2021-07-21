@@ -1,4 +1,4 @@
-use crate::TChannelError;
+use crate::error::CodecError;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use num_traits::FromPrimitive;
 use std::collections::{HashMap, VecDeque};
@@ -15,10 +15,10 @@ pub const MAX_FRAME_ARGS: usize = 3;
 pub const ARG_LEN_LEN: usize = 2;
 
 pub trait Codec: Sized {
-    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError>;
-    fn decode(src: &mut Bytes) -> Result<Self, TChannelError>;
+    fn encode(self, dst: &mut BytesMut) -> Result<(), CodecError>;
+    fn decode(src: &mut Bytes) -> Result<Self, CodecError>;
 
-    fn encode_bytes(self) -> Result<Bytes, TChannelError> {
+    fn encode_bytes(self) -> Result<Bytes, CodecError> {
         let mut bytes = BytesMut::new();
         self.encode(&mut bytes);
         Ok(Bytes::from(bytes))
@@ -90,7 +90,7 @@ pub struct Tracing {
 }
 
 impl Codec for Tracing {
-    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), CodecError> {
         dst.put_u64(self.span_id);
         dst.put_u64(self.parent_id);
         dst.put_u64(self.trace_id);
@@ -98,7 +98,7 @@ impl Codec for Tracing {
         Ok(()) // TODO Ok?
     }
 
-    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+    fn decode(src: &mut Bytes) -> Result<Self, CodecError> {
         Ok(Tracing::new(
             src.get_u64(),
             src.get_u64(),
@@ -123,13 +123,13 @@ impl Default for Init {
 }
 
 impl Codec for Init {
-    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), CodecError> {
         dst.put_u16(self.version);
         encode_headers(self.headers, dst)?;
         Ok(())
     }
 
-    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+    fn decode(src: &mut Bytes) -> Result<Self, CodecError> {
         Ok(Init::new(src.get_u16(), decode_headers(src)?))
     }
 }
@@ -150,13 +150,13 @@ pub struct CallArgs {
 }
 
 impl Codec for CallArgs {
-    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), CodecError> {
         encode_checksum(self.checksum_type, self.checksum, dst)?;
         encode_args(self.args, dst)?;
         Ok(())
     }
 
-    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+    fn decode(src: &mut Bytes) -> Result<Self, CodecError> {
         let (checksum_type, checksum) = decode_checksum(src)?;
         Ok(CallArgs::new(
             checksum_type,
@@ -177,14 +177,14 @@ pub struct CallFieldsEncoded {
 }
 
 impl Codec for CallFieldsEncoded {
-    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), CodecError> {
         dst.put_u8(self.flags.bits());
         dst.put(self.fields);
         self.args.encode(dst)?;
         Ok(())
     }
 
-    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+    fn decode(src: &mut Bytes) -> Result<Self, CodecError> {
         Ok(CallFieldsEncoded::new(
             decode_bitflag(src.get_u8(), Flags::from_bits)?,
             CallRequestFields::decode(src)?.encode_bytes()?,
@@ -206,7 +206,7 @@ pub struct CallRequestFields {
 }
 
 impl Codec for CallRequestFields {
-    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), CodecError> {
         dst.put_u32(self.ttl);
         self.tracing.encode(dst)?;
         encode_small_string(self.service, dst)?;
@@ -214,7 +214,7 @@ impl Codec for CallRequestFields {
         Ok(())
     }
 
-    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+    fn decode(src: &mut Bytes) -> Result<Self, CodecError> {
         Ok(CallRequestFields::new(
             src.get_u32(),
             Tracing::decode(src)?,
@@ -235,14 +235,14 @@ pub struct CallRequest {
 }
 
 impl Codec for CallRequest {
-    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), CodecError> {
         dst.put_u8(self.flags.bits());
         self.fields.encode(dst);
         self.args.encode(dst)?;
         Ok(())
     }
 
-    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+    fn decode(src: &mut Bytes) -> Result<Self, CodecError> {
         Ok(CallRequest::new(
             decode_bitflag(src.get_u8(), Flags::from_bits)?,
             CallRequestFields::decode(src)?,
@@ -265,14 +265,14 @@ pub struct CallResponseFields {
 }
 
 impl Codec for CallResponseFields {
-    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), CodecError> {
         dst.put_u8(self.code as u8);
         self.tracing.encode(dst)?;
         encode_small_headers(self.headers, dst)?;
         Ok(())
     }
 
-    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+    fn decode(src: &mut Bytes) -> Result<Self, CodecError> {
         Ok(CallResponseFields::new(
             decode_bitflag(src.get_u8(), ResponseCode::from_u8)?,
             Tracing::decode(src)?,
@@ -296,14 +296,14 @@ pub struct CallResponse {
 }
 
 impl Codec for CallResponse {
-    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), CodecError> {
         dst.put_u8(self.flags.bits());
         self.fields.encode(dst)?;
         self.args.encode(dst)?;
         Ok(())
     }
 
-    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+    fn decode(src: &mut Bytes) -> Result<Self, CodecError> {
         Ok(CallResponse::new(
             decode_bitflag(src.get_u8(), Flags::from_bits)?,
             CallResponseFields::decode(src)?,
@@ -324,13 +324,13 @@ pub struct CallContinue {
 }
 
 impl Codec for CallContinue {
-    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), CodecError> {
         dst.put_u8(self.flags.bits());
         self.args.encode(dst)?;
         Ok(())
     }
 
-    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+    fn decode(src: &mut Bytes) -> Result<Self, CodecError> {
         Ok(CallContinue::new(
             decode_bitflag(src.get_u8(), Flags::from_bits)?,
             CallArgs::decode(src)?,
@@ -348,14 +348,14 @@ pub struct Cancel {
 }
 
 impl Codec for Cancel {
-    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), CodecError> {
         dst.put_u32(self.ttl);
         self.tracing.encode(dst)?;
         encode_string(self.why, dst)?;
         Ok(())
     }
 
-    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+    fn decode(src: &mut Bytes) -> Result<Self, CodecError> {
         Ok(Cancel::new(
             src.get_u32(),
             Tracing::decode(src)?,
@@ -373,13 +373,13 @@ pub struct Claim {
 }
 
 impl Codec for Claim {
-    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), CodecError> {
         dst.put_u32(self.ttl);
         self.tracing.encode(dst)?;
         Ok(())
     }
 
-    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+    fn decode(src: &mut Bytes) -> Result<Self, CodecError> {
         Ok(Claim::new(src.get_u32(), Tracing::decode(src)?))
     }
 }
@@ -396,14 +396,14 @@ pub struct ErrorMsg {
 }
 
 impl Codec for ErrorMsg {
-    fn encode(self, dst: &mut BytesMut) -> Result<(), TChannelError> {
+    fn encode(self, dst: &mut BytesMut) -> Result<(), CodecError> {
         dst.put_u8(self.code as u8);
         self.tracing.encode(dst)?;
         encode_string(self.message, dst)?;
         Ok(())
     }
 
-    fn decode(src: &mut Bytes) -> Result<Self, TChannelError> {
+    fn decode(src: &mut Bytes) -> Result<Self, CodecError> {
         Ok(ErrorMsg::new(
             decode_bitflag(src.get_u8(), ErrorCode::from_u8)?,
             Tracing::decode(src)?,
@@ -412,17 +412,14 @@ impl Codec for ErrorMsg {
     }
 }
 
-fn encode_headers(
-    headers: HashMap<String, String>,
-    dst: &mut BytesMut,
-) -> Result<(), TChannelError> {
+fn encode_headers(headers: HashMap<String, String>, dst: &mut BytesMut) -> Result<(), CodecError> {
     encode_header_fields::<u16>(headers, dst, &BytesMut::put_u16, &encode_string)
 }
 
 fn encode_small_headers(
     headers: HashMap<String, String>,
     dst: &mut BytesMut,
-) -> Result<(), TChannelError> {
+) -> Result<(), CodecError> {
     encode_header_fields::<u8>(headers, dst, &BytesMut::put_u8, &encode_small_string)
 }
 
@@ -430,8 +427,8 @@ fn encode_header_fields<T: TryFrom<usize>>(
     headers: HashMap<String, String>,
     dst: &mut BytesMut,
     encode_len_fn: &dyn Fn(&mut BytesMut, T),
-    encode_string: &dyn Fn(String, &mut BytesMut) -> Result<(), TChannelError>,
-) -> Result<(), TChannelError> {
+    encode_string: &dyn Fn(String, &mut BytesMut) -> Result<(), CodecError>,
+) -> Result<(), CodecError> {
     encode_len(dst, headers.len(), encode_len_fn)?;
     for (headerKey, headerValue) in headers {
         encode_string(headerKey, dst)?;
@@ -440,19 +437,19 @@ fn encode_header_fields<T: TryFrom<usize>>(
     Ok(())
 }
 
-fn decode_headers(src: &mut Bytes) -> Result<HashMap<String, String>, TChannelError> {
+fn decode_headers(src: &mut Bytes) -> Result<HashMap<String, String>, CodecError> {
     decode_headers_field(src, &Bytes::get_u16, &decode_string)
 }
 
-fn decode_small_headers(src: &mut Bytes) -> Result<HashMap<String, String>, TChannelError> {
+fn decode_small_headers(src: &mut Bytes) -> Result<HashMap<String, String>, CodecError> {
     decode_headers_field(src, &Bytes::get_u8, &decode_small_string)
 }
 
 fn decode_headers_field<T: TryInto<usize>>(
     src: &mut Bytes,
     decode_len_fn: &dyn Fn(&mut Bytes) -> T,
-    decode_string_fn: &dyn Fn(&mut Bytes) -> Result<String, TChannelError>,
-) -> Result<HashMap<String, String>, TChannelError> {
+    decode_string_fn: &dyn Fn(&mut Bytes) -> Result<String, CodecError>,
+) -> Result<HashMap<String, String>, CodecError> {
     let len = decode_len(src, decode_len_fn)?;
     let mut headers = HashMap::new();
     for _ in 0..len {
@@ -467,17 +464,15 @@ fn encode_checksum(
     checksum_type: ChecksumType,
     value: Option<u32>,
     dst: &mut BytesMut,
-) -> Result<(), TChannelError> {
+) -> Result<(), CodecError> {
     dst.put_u8(checksum_type as u8);
     if checksum_type != ChecksumType::None {
-        dst.put_u32(value.ok_or(TChannelError::FrameCodecError(
-            "Missing checksum value.".to_owned(),
-        ))?)
+        dst.put_u32(value.ok_or(CodecError::Error("Missing checksum value.".to_owned()))?)
     }
     Ok(())
 }
 
-fn decode_checksum(src: &mut Bytes) -> Result<(ChecksumType, Option<u32>), TChannelError> {
+fn decode_checksum(src: &mut Bytes) -> Result<(ChecksumType, Option<u32>), CodecError> {
     let checksum_type = decode_bitflag(src.get_u8(), ChecksumType::from_u8)?;
     match checksum_type {
         ChecksumType::None => Ok((ChecksumType::None, None)),
@@ -485,14 +480,14 @@ fn decode_checksum(src: &mut Bytes) -> Result<(ChecksumType, Option<u32>), TChan
     }
 }
 
-fn decode_bitflag<T, F: Fn(u8) -> Option<T>>(byte: u8, decoder: F) -> Result<T, TChannelError> {
-    decoder(byte).ok_or_else(|| TChannelError::FrameCodecError(format!("Unknown flag: {}", byte)))
+fn decode_bitflag<T, F: Fn(u8) -> Option<T>>(byte: u8, decoder: F) -> Result<T, CodecError> {
+    decoder(byte).ok_or_else(|| CodecError::Error(format!("Unknown flag: {}", byte)))
 }
 
-fn encode_args(args: VecDeque<Option<Bytes>>, dst: &mut BytesMut) -> Result<(), TChannelError> {
+fn encode_args(args: VecDeque<Option<Bytes>>, dst: &mut BytesMut) -> Result<(), CodecError> {
     let args_len = args.len();
     if args_len == 0 || args_len > MAX_FRAME_ARGS {
-        return Err(TChannelError::FrameCodecError(format!(
+        return Err(CodecError::Error(format!(
             "Wrong number of frame args {}",
             args_len
         )));
@@ -503,7 +498,7 @@ fn encode_args(args: VecDeque<Option<Bytes>>, dst: &mut BytesMut) -> Result<(), 
             Some(arg) => {
                 let len = arg.len();
                 if dst.remaining() < len + ARG_LEN_LEN {
-                    return Err(TChannelError::FrameCodecError(
+                    return Err(CodecError::Error(
                         "Not enough capacity to encode arg".to_owned(),
                     ));
                 }
@@ -515,45 +510,38 @@ fn encode_args(args: VecDeque<Option<Bytes>>, dst: &mut BytesMut) -> Result<(), 
     Ok(())
 }
 
-fn decode_args(src: &mut Bytes) -> Result<VecDeque<Option<Bytes>>, TChannelError> {
+fn decode_args(src: &mut Bytes) -> Result<VecDeque<Option<Bytes>>, CodecError> {
     if src.remaining() == 0 {
-        return Err(TChannelError::FrameCodecError(
-            "Frame missing args".to_owned(),
-        ));
+        return Err(CodecError::Error("Frame missing args".to_owned()));
     }
     let mut args = VecDeque::new();
     while !src.is_empty() && args.len() < MAX_FRAME_ARGS {
         args.push_back(decode_arg(src)?);
     }
     if !src.is_empty() {
-        return Err(TChannelError::FrameCodecError(
-            "Incorrect frame length".to_owned(),
-        ));
+        return Err(CodecError::Error("Incorrect frame length".to_owned()));
     }
     Ok(args)
 }
 
-fn decode_arg(src: &mut Bytes) -> Result<Option<Bytes>, TChannelError> {
+fn decode_arg(src: &mut Bytes) -> Result<Option<Bytes>, CodecError> {
     match src.remaining() {
-        0 | 1 => Err(TChannelError::FrameCodecError(
-            "Cannot read arg length".to_owned(),
-        )),
+        0 | 1 => Err(CodecError::Error("Cannot read arg length".to_owned())),
         remaining => match src.get_u16() {
             0 => Ok(None),
-            len if len > (remaining as u16 - 2) => Err(TChannelError::FrameCodecError(format!(
-                "Wrong arg length: {}",
-                len
-            ))),
+            len if len > (remaining as u16 - 2) => {
+                Err(CodecError::Error(format!("Wrong arg length: {}", len)))
+            }
             len => Ok(Some(src.split_to(len as usize))),
         },
     }
 }
 
-fn encode_string(value: String, dst: &mut BytesMut) -> Result<(), TChannelError> {
+fn encode_string(value: String, dst: &mut BytesMut) -> Result<(), CodecError> {
     encode_string_field(value, dst, &BytesMut::put_u16)
 }
 
-fn encode_small_string(value: String, dst: &mut BytesMut) -> Result<(), TChannelError> {
+fn encode_small_string(value: String, dst: &mut BytesMut) -> Result<(), CodecError> {
     encode_string_field(value, dst, &BytesMut::put_u8)
 }
 
@@ -561,23 +549,23 @@ fn encode_string_field<T: TryFrom<usize>>(
     value: String,
     dst: &mut BytesMut,
     encode_len_fn: &dyn Fn(&mut BytesMut, T),
-) -> Result<(), TChannelError> {
+) -> Result<(), CodecError> {
     encode_len(dst, value.len(), encode_len_fn)?;
     dst.write_str(value.as_str())?;
     Ok(())
 }
 
-fn decode_string(src: &mut Bytes) -> Result<String, TChannelError> {
+fn decode_string(src: &mut Bytes) -> Result<String, CodecError> {
     decode_string_field(src, &Bytes::get_u16)
 }
-fn decode_small_string(src: &mut Bytes) -> Result<String, TChannelError> {
+fn decode_small_string(src: &mut Bytes) -> Result<String, CodecError> {
     decode_string_field(src, &Bytes::get_u8)
 }
 
 fn decode_string_field<T: Into<usize>>(
     src: &mut Bytes,
     get_len: &dyn Fn(&mut Bytes) -> T,
-) -> Result<String, TChannelError> {
+) -> Result<String, CodecError> {
     let len = get_len(src);
     let bytes = src.copy_to_bytes(len.into());
     Ok(String::from_utf8(bytes.chunk().to_vec())?)
@@ -587,12 +575,12 @@ fn encode_len<T: TryFrom<usize>>(
     dst: &mut BytesMut,
     value: usize,
     encode_len_fn: &dyn Fn(&mut BytesMut, T),
-) -> Result<(), TChannelError> {
+) -> Result<(), CodecError> {
     encode_len_fn(
         dst,
         value
             .try_into()
-            .map_err(|_| TChannelError::Error(format!("Failed to cast '{}' len.", value)))?, //TODO impl From for TChannelError
+            .map_err(|_| CodecError::Error(format!("Failed to cast '{}' len.", value)))?, //TODO impl From for CodecError
     );
     Ok(())
 }
@@ -600,8 +588,8 @@ fn encode_len<T: TryFrom<usize>>(
 fn decode_len<T: TryInto<usize>>(
     src: &mut Bytes,
     decode_len_fn: &dyn Fn(&mut Bytes) -> T,
-) -> Result<usize, TChannelError> {
+) -> Result<usize, CodecError> {
     decode_len_fn(src)
         .try_into()
-        .map_err(|_| TChannelError::Error("Failed to cast len to usize.".to_string()))
+        .map_err(|_| CodecError::Error("Failed to cast len to usize.".to_string()))
 }

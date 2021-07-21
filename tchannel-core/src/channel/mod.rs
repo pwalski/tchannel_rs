@@ -12,8 +12,8 @@ use crate::channel::frames::TFrameStream;
 use crate::channel::messages::defragmenting::Defragmenter;
 use crate::channel::messages::fragmenting::Fragmenter;
 use crate::channel::messages::{Request, Response};
+use crate::error::{ConnectionError, TChannelError};
 use crate::handlers::RequestHandler;
-use crate::TChannelError;
 
 use futures::join;
 
@@ -95,7 +95,7 @@ impl SubChannel {
         &self,
         request: REQ,
         host: SocketAddr,
-    ) -> Result<(ResponseCode, RES), crate::TChannelError> {
+    ) -> Result<(ResponseCode, RES), crate::error::TChannelError> {
         let (connection_res, frames_res) = join!(
             self.connect(host),
             Fragmenter::new(request, self.service_name.clone()).create_frames(),
@@ -114,7 +114,10 @@ impl SubChannel {
     }
 }
 
-async fn send_frames(frames: TFrameStream, frames_out: &FrameOutput) -> Result<(), TChannelError> {
+async fn send_frames(
+    frames: TFrameStream,
+    frames_out: &FrameOutput,
+) -> Result<(), ConnectionError> {
     debug!("Sending frames");
     frames
         .then(|frame| frames_out.send(frame))

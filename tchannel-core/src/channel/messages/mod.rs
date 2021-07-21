@@ -1,15 +1,13 @@
 use crate::channel::frames::headers::ArgSchemeValue;
-use crate::channel::frames::payloads::{ResponseCode};
+use crate::channel::frames::payloads::ResponseCode;
 
-use crate::TChannelError;
+use crate::error::{CodecError, TChannelError};
 use async_trait::async_trait;
 use bytes::Bytes;
 
-
-use std::convert::{TryFrom};
+use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::net::SocketAddr;
-
 
 pub mod defragmenting;
 pub mod fragmenting;
@@ -23,7 +21,7 @@ pub trait Message: Debug + Sized + Send {
 
 pub trait Request: Message {}
 
-pub trait Response: Message + TryFrom<Vec<Bytes>, Error = TChannelError> {}
+pub trait Response: Message + TryFrom<Vec<Bytes>, Error = CodecError> {}
 
 #[async_trait]
 pub trait MessageChannel {

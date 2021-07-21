@@ -3,17 +3,12 @@ use crate::channel::frames::headers::ArgSchemeValue;
 use crate::channel::messages::*;
 use crate::channel::SubChannel;
 
-
-
 use bytes::{Buf, Bytes};
 
+use std::collections::VecDeque;
 
-
-use std::collections::{VecDeque};
-
-
+use crate::error::CodecError;
 use std::string::FromUtf8Error;
-
 
 #[derive(Default, Debug, Builder, Getters, new)]
 #[builder(pattern = "owned")]
@@ -44,7 +39,7 @@ impl Response for RawMessage {}
 
 //TODO use it or drop it
 impl TryFrom<Vec<Bytes>> for RawMessage {
-    type Error = TChannelError;
+    type Error = CodecError;
     fn try_from(args: Vec<Bytes>) -> Result<Self, Self::Error> {
         let mut deq_args = VecDeque::from(args);
         Ok(RawMessage::new(
@@ -71,7 +66,7 @@ impl MessageChannel for SubChannel {
         &self,
         request: Self::REQ,
         host: SocketAddr,
-    ) -> Result<(ResponseCode, Self::RES), crate::TChannelError> {
+    ) -> Result<(ResponseCode, Self::RES), crate::error::TChannelError> {
         self.send(request, host).await
     }
 }

@@ -1,9 +1,9 @@
 pub mod headers;
 pub mod payloads;
 
-use crate::TChannelError;
+use crate::error::CodecError;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use futures::{Stream};
+use futures::Stream;
 use std::pin::Pin;
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -76,7 +76,7 @@ pub struct TFrameId {
 pub struct TFrameIdCodec {}
 
 impl Encoder<TFrameId> for TFrameIdCodec {
-    type Error = crate::TChannelError;
+    type Error = crate::error::CodecError;
 
     fn encode(&mut self, item: TFrameId, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let frame = item.frame();
@@ -96,7 +96,7 @@ impl Encoder<TFrameId> for TFrameIdCodec {
 
 impl Decoder for TFrameIdCodec {
     type Item = TFrameId;
-    type Error = crate::TChannelError;
+    type Error = crate::error::CodecError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         if src.is_empty() {
@@ -105,13 +105,13 @@ impl Decoder for TFrameIdCodec {
         }
         let size = src.get_u16();
         if size < FRAME_HEADER_LENGTH {
-            return Err(TChannelError::FrameCodecError("Frame too short".to_owned()));
+            return Err(CodecError::Error("Frame too short".to_owned()));
         }
         let frame_type_bytes = src.get_u8();
         let frame_type = match num::FromPrimitive::from_u8(frame_type_bytes) {
             Some(frame_type) => frame_type,
             None => {
-                return Err(TChannelError::FrameCodecError(format!(
+                return Err(CodecError::Error(format!(
                     "Unknown frame type {}",
                     frame_type_bytes
                 )))

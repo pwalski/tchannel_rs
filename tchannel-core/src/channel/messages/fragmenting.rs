@@ -8,7 +8,7 @@ use crate::channel::frames::payloads::{
 use crate::channel::frames::{TFrame, TFrameStream, Type, FRAME_HEADER_LENGTH, FRAME_MAX_LENGTH};
 use crate::channel::messages::fragmenting::FragmentationStatus::{CompleteAtTheEnd, Incomplete};
 use crate::channel::messages::Request;
-use crate::TChannelError;
+use crate::error::TChannelError;
 use bytes::Buf;
 use bytes::{Bytes, BytesMut};
 use std::collections::{HashMap, VecDeque};

@@ -6,7 +6,7 @@ use bytes::Bytes;
 pub struct ThriftMessage {}
 
 impl TryFrom<Vec<Bytes>> for ThriftMessage {
-    type Error = TChannelError;
+    type Error = CodecError;
     fn try_from(args: Vec<Bytes>) -> Result<Self, Self::Error> {
         todo!()
     }

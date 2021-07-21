@@ -1,11 +1,11 @@
 use crate::channel::connection::FrameInput;
-use crate::channel::frames::headers::{TransportHeader};
+use crate::channel::frames::headers::TransportHeader;
 use crate::channel::frames::payloads::{
     CallArgs, CallContinue, CallResponse, ChecksumType, Codec, Flags, ResponseCode,
 };
 use crate::channel::frames::Type;
 use crate::channel::messages::Response;
-use crate::TChannelError;
+use crate::error::TChannelError;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
