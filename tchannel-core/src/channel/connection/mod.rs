@@ -5,7 +5,7 @@ use crate::channel::frames::{TFrame, TFrameId, TFrameIdCodec, Type};
 use crate::error::ConnectionError;
 use async_trait::async_trait;
 use bb8::{ErrorSink, Pool, PooledConnection, RunError};
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use core::time::Duration;
 use futures::prelude::*;
 
@@ -27,6 +27,7 @@ use tokio::net::TcpStream;
 
 use tokio::sync::mpsc;
 
+use crate::error::ConnectionError::{MessageError, UnexpectedResponseError};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
@@ -169,15 +170,18 @@ impl Connection {
         Ok(connection)
     }
 
+    /// Prepares frame I/O with new message id. Then sends `frame` and awaits for response.
     pub async fn send_one(&self, frame: TFrame) -> Result<TFrameId, ConnectionError> {
-        let (frame_output, mut frame_receiver) = self.new_message_io().await;
+        let (frame_output, mut frame_receiver) = self.new_frame_io().await;
         frame_output.send(frame).await?;
         let response = frame_receiver.recv().await;
         frame_output.close().await;
         response.ok_or_else(|| ConnectionError::Error("Received no response".to_owned()))
     }
 
-    pub async fn new_message_io(&self) -> (FrameOutput, FrameInput) {
+    /// Prepares frame I/O with new message id.
+    /// Then returns both input and output which allows to send multiple frames with same message id.
+    pub async fn new_frame_io(&self) -> (FrameOutput, FrameInput) {
         let message_id = self.next_message_id();
         let (sender, receiver) = mpsc::channel::<TFrameId>(10); //TODO connfigure
         self.pending_ids.add(message_id, sender).await;
@@ -312,49 +316,60 @@ impl bb8::ManageConnection for ConnectionManager {
 
     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
         let connection = Connection::connect(self.addr, self.frame_buffer_size).await?;
-        Self::verify(connection).await
+        verify(connection).await
     }
 
-    async fn is_valid(&self, _conn: &mut PooledConnection<'_, Self>) -> Result<(), Self::Error> {
-        error!("Is valid?");
-        Ok(())
+    async fn is_valid(&self, conn: &mut PooledConnection<'_, Self>) -> Result<(), Self::Error> {
+        debug!("Is valid?");
+        ping(conn).await
     }
 
-    fn has_broken(&self, _conn: &mut Self::Connection) -> bool {
-        error!("Has broken?");
+    fn has_broken(&self, conn: &mut Self::Connection) -> bool {
+        debug!("Has broken? (not implemented)");
         false
     }
 }
 
-impl ConnectionManager {
-    async fn verify(connection: Connection) -> Result<Connection, ConnectionError> {
-        let mut frame_id = Self::init_handshake(&connection).await?;
-        match frame_id.frame().frame_type() {
-            Type::InitResponse => {
-                let init = Init::decode(frame_id.frame.payload_mut())?;
-                debug!("Received Init response: {:?}", init);
-                match *init.version() {
-                    PROTOCOL_VERSION => Ok(connection),
-                    other_version => Err(ConnectionError::Error(format!(
-                        "Unsupported protocol version: {} ",
-                        other_version
-                    ))),
-                }
+async fn verify(connection: Connection) -> Result<Connection, ConnectionError> {
+    let mut frame_id = init_handshake(&connection).await?;
+    match frame_id.frame().frame_type() {
+        Type::InitResponse => {
+            let init = Init::decode(frame_id.frame.payload_mut())?;
+            debug!("Received Init response: {:?}", init);
+            match *init.version() {
+                PROTOCOL_VERSION => Ok(connection),
+                other_version => Err(ConnectionError::Error(format!(
+                    "Unsupported protocol version: {} ",
+                    other_version
+                ))),
             }
-            Type::Error => {
-                let error = ErrorMsg::decode(frame_id.frame.payload_mut())?;
-                debug!("Received error response {:?}", error);
-                Err(ConnectionError::MessageError(error))
-            }
-            other_type => Err(ConnectionError::UnexpectedResponseError(*other_type)),
         }
+        Type::Error => {
+            let error = ErrorMsg::decode(frame_id.frame.payload_mut())?;
+            debug!("Received error response {:?}", error);
+            Err(ConnectionError::MessageError(error))
+        }
+        other_type => Err(ConnectionError::UnexpectedResponseError(*other_type)),
     }
+}
 
-    async fn init_handshake(connection: &Connection) -> Result<TFrameId, ConnectionError> {
-        let mut bytes = BytesMut::new();
-        let init = Init::default();
-        init.encode(&mut bytes);
-        let frame = TFrame::new(Type::InitRequest, bytes.freeze());
-        connection.send_one(frame).await
-    }
+async fn init_handshake(connection: &Connection) -> Result<TFrameId, ConnectionError> {
+    let mut bytes = BytesMut::new();
+    let init = Init::default();
+    init.encode(&mut bytes);
+    let init_frame = TFrame::new(Type::InitRequest, bytes.freeze());
+    connection.send_one(init_frame).await
+}
+
+async fn ping(connection: &Connection) -> Result<(), ConnectionError> {
+    let ping_req = TFrame::new(Type::PingRequest, Bytes::new());
+    connection
+        .send_one(ping_req)
+        .await
+        .map(|frame_id| frame_id.frame)
+        .map(|mut frame| match frame.frame_type() {
+            Type::PingResponse => Ok(()),
+            Type::Error => Err(MessageError(ErrorMsg::decode(frame.payload_mut())?)),
+            frame_type => Err(UnexpectedResponseError(frame_type.clone())),
+        })?
 }

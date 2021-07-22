@@ -1,13 +1,15 @@
-use log::{debug, error};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::str::FromStr;
+
+use log::{debug, error};
+use tokio::net::lookup_host;
+
 use tchannel::channel::connection::ConnectionOptions;
 use tchannel::channel::messages::raw::*;
 use tchannel::channel::messages::*;
 use tchannel::channel::*;
-use tchannel::Error;
-use tokio::net::lookup_host;
+use tchannel::error::Error;
 
 #[tokio::main]
 pub async fn main() -> Result<(), Error> {

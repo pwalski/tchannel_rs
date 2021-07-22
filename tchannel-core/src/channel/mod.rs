@@ -110,7 +110,7 @@ impl SubChannel {
     async fn connect(&self, host: SocketAddr) -> Result<(FrameOutput, FrameInput), TChannelError> {
         let pool = self.connection_pools.get(host).await?;
         let connection = pool.get().await?;
-        Ok(connection.new_message_io().await)
+        Ok(connection.new_frame_io().await)
     }
 }
 
