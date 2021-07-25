@@ -13,11 +13,11 @@ impl TryFrom<Vec<Bytes>> for ThriftMessage {
 }
 
 impl Message for ThriftMessage {
-    fn arg_scheme() -> ArgSchemeValue {
+    fn args_scheme() -> ArgSchemeValue {
         ArgSchemeValue::Thrift
     }
 
-    fn args(self) -> Vec<Bytes> {
+    fn to_args(self) -> Vec<Bytes> {
         todo!()
     }
 }

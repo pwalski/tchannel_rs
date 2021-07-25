@@ -5,28 +5,22 @@ pub mod messages;
 use crate::channel::connection::{
     ConnectionOptions, ConnectionPools, ConnectionPoolsBuilder, FrameInput, FrameOutput,
 };
-
 use crate::channel::frames::payloads::ResponseCode;
-
 use crate::channel::frames::TFrameStream;
 use crate::channel::messages::defragmenting::Defragmenter;
 use crate::channel::messages::fragmenting::Fragmenter;
 use crate::channel::messages::{Request, Response};
 use crate::error::{ConnectionError, TChannelError};
 use crate::handlers::RequestHandler;
-
+use futures::future::lazy;
 use futures::join;
-
 use futures::FutureExt;
 use futures::StreamExt;
 use futures::{future, TryStreamExt};
 use log::{debug, error};
 use std::collections::HashMap;
-
 use std::net::SocketAddr;
-
 use std::sync::Arc;
-
 use tokio::sync::RwLock;
 
 pub struct TChannel {
@@ -96,10 +90,7 @@ impl SubChannel {
         request: REQ,
         host: SocketAddr,
     ) -> Result<(ResponseCode, RES), crate::error::TChannelError> {
-        let (connection_res, frames_res) = join!(
-            self.connect(host),
-            Fragmenter::new(request, self.service_name.clone()).create_frames(),
-        );
+        let (connection_res, frames_res) = join!(self.connect(host), self.create_frames(request));
         let (frames_out, frames_in) = connection_res?;
         send_frames(frames_res?, &frames_out).await?;
         let response = Defragmenter::new(frames_in).read_response().await;
@@ -111,6 +102,18 @@ impl SubChannel {
         let pool = self.connection_pools.get(host).await?;
         let connection = pool.get().await?;
         Ok(connection.new_frame_io().await)
+    }
+
+    async fn create_frames<REQ: Request>(
+        &self,
+        request: REQ,
+    ) -> Result<TFrameStream, TChannelError> {
+        Fragmenter::new(
+            self.service_name.clone(),
+            REQ::args_scheme(),
+            request.to_args(),
+        )
+        .create_frames()
     }
 }
 

@@ -24,11 +24,11 @@ pub struct RawMessage {
 impl RawMessage {}
 
 impl Message for RawMessage {
-    fn arg_scheme() -> ArgSchemeValue {
+    fn args_scheme() -> ArgSchemeValue {
         ArgSchemeValue::Raw
     }
 
-    fn args(self) -> Vec<Bytes> {
+    fn to_args(self) -> Vec<Bytes> {
         Vec::from([self.endpoint.into(), self.header.into(), self.body])
     }
 }

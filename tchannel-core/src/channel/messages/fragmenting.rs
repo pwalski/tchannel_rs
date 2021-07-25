@@ -7,38 +7,38 @@ use crate::channel::frames::payloads::{
 };
 use crate::channel::frames::{TFrame, TFrameStream, Type, FRAME_HEADER_LENGTH, FRAME_MAX_LENGTH};
 use crate::channel::messages::fragmenting::FragmentationStatus::{CompleteAtTheEnd, Incomplete};
-use crate::channel::messages::Request;
+use crate::channel::messages::{Message, Request};
 use crate::error::TChannelError;
 use bytes::Buf;
 use bytes::{Bytes, BytesMut};
 use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug, new)]
-pub struct Fragmenter<REQ: Request> {
-    request: REQ,
+pub struct Fragmenter {
     service_name: String,
+    arg_scheme: ArgSchemeValue,
+    args: Vec<Bytes>,
 }
 
-impl<REQ: Request> Fragmenter<REQ> {
-    pub async fn create_frames(self) -> Result<TFrameStream, TChannelError> {
-        let mut args = self.request.args();
-        args.reverse();
+impl Fragmenter {
+    pub fn create_frames(mut self) -> Result<TFrameStream, TChannelError> {
+        self.args.reverse();
 
-        let request_fields = create_request_fields_bytes(REQ::arg_scheme(), self.service_name)?;
+        let request_fields = self.create_request_fields_bytes()?;
         let payload_limit = calculate_payload_limit(request_fields.len());
-        let frame_args = create_frame_args(&mut args, payload_limit);
-        let flag = get_frame_flag(&args);
+        let frame_args = self.next_frame_args(payload_limit);
+        let flag = self.current_frame_flag();
 
         let mut call_frames = Vec::new();
         let call_request = CallFieldsEncoded::new(flag, request_fields, frame_args);
         debug!("Creating call request {:?}", call_request);
         call_frames.push(TFrame::new(Type::CallRequest, call_request.encode_bytes()?));
 
-        while !args.is_empty() {
+        while !self.args.is_empty() {
             debug!("Creating call continue");
             let payload_limit = calculate_payload_limit(0);
-            let frame_args = create_frame_args(&mut args, payload_limit);
-            let flag = get_frame_flag(&args);
+            let frame_args = self.next_frame_args(payload_limit);
+            let flag = self.current_frame_flag();
             let call_continue = CallContinue::new(flag, frame_args);
             call_frames.push(TFrame::new(
                 Type::CallRequestContinue,
@@ -47,6 +47,67 @@ impl<REQ: Request> Fragmenter<REQ> {
         }
         debug!("Done! {} frames", call_frames.len());
         Ok(Box::pin(futures::stream::iter(call_frames)))
+    }
+
+    fn create_request_fields_bytes(&self) -> Result<Bytes, TChannelError> {
+        let mut bytes = BytesMut::new();
+        self.create_request_fields().encode(&mut bytes)?;
+        Ok(Bytes::from(bytes))
+    }
+
+    fn create_request_fields(&self) -> CallRequestFields {
+        let tracing = create_tracing();
+        let headers = self.create_headers(); //TODO get rid of clones
+        CallRequestFields::new(60_000, tracing, self.service_name.clone(), headers)
+        //TODO configurable TTL
+    }
+
+    fn create_headers(&self) -> HashMap<String, String> {
+        let mut headers = HashMap::new();
+        headers.insert(
+            TransportHeader::ArgSchemeKey.to_string(),
+            self.arg_scheme.to_string(),
+        );
+        headers.insert(CallerNameKey.to_string(), self.service_name.clone());
+        headers
+    }
+
+    fn next_frame_args(&mut self, payload_limit: usize) -> CallArgs {
+        let frame_args = self.next_frame_args_vec(payload_limit);
+        let checksum_type = ChecksumType::None;
+        let checksum = calculate_checksum(&frame_args, checksum_type);
+        CallArgs::new(checksum_type, checksum, frame_args)
+    }
+
+    fn next_frame_args_vec(&mut self, payload_limit: usize) -> VecDeque<Option<Bytes>> {
+        let mut frame_args = VecDeque::with_capacity(3);
+        let mut remaining_limit = payload_limit;
+        while let Some(mut arg) = self.args.pop() {
+            let (status, frame_arg_bytes) = fragment_arg(&mut arg, remaining_limit);
+            frame_arg_bytes.map(|frame_arg| match frame_arg.len() {
+                0 => frame_args.push_back(None),
+                len => {
+                    remaining_limit -= len + ARG_LEN_LEN;
+                    frame_args.push_back(Some(frame_arg));
+                }
+            });
+            if status == Incomplete {
+                self.args.push(arg);
+                break;
+            } else if status == CompleteAtTheEnd {
+                self.args.push(Bytes::new());
+                break;
+            }
+        }
+        frame_args
+    }
+
+    fn current_frame_flag(&self) -> Flags {
+        if self.args.is_empty() {
+            Flags::NONE
+        } else {
+            Flags::MORE_FRAGMENTS_FOLLOW
+        }
     }
 }
 
@@ -58,77 +119,6 @@ enum FragmentationStatus {
     CompleteAtTheEnd,
     //Partially stored in frame
     Incomplete,
-}
-
-fn create_request_fields_bytes(
-    arg_scheme: ArgSchemeValue,
-    service_name: String,
-) -> Result<Bytes, TChannelError> {
-    let mut bytes = BytesMut::new();
-    create_request_fields(arg_scheme, service_name).encode(&mut bytes)?;
-    Ok(Bytes::from(bytes))
-}
-
-fn create_request_fields(arg_scheme: ArgSchemeValue, service_name: String) -> CallRequestFields {
-    let tracing = create_tracing();
-    let headers = create_headers(arg_scheme, service_name.clone()); //TODO get rid of clones
-    CallRequestFields::new(60_000, tracing, service_name, headers) //TODO configurable TTL
-}
-
-fn create_frame_args(args: &mut Vec<Bytes>, payload_limit: usize) -> CallArgs {
-    let frame_args = create_frame_args_vec(args, payload_limit);
-    let checksum_type = ChecksumType::None;
-    let checksum = calculate_checksum(&frame_args, checksum_type);
-    CallArgs::new(checksum_type, checksum, frame_args)
-}
-
-fn create_frame_args_vec(args: &mut Vec<Bytes>, payload_limit: usize) -> VecDeque<Option<Bytes>> {
-    let mut frame_args = VecDeque::with_capacity(3);
-    let mut remaining_limit = payload_limit;
-    while let Some(mut arg) = args.pop() {
-        let (status, frame_arg_bytes) = fragment_arg(&mut arg, remaining_limit);
-        frame_arg_bytes.map(|frame_arg| match frame_arg.len() {
-            0 => frame_args.push_back(None),
-            len => {
-                remaining_limit -= len + ARG_LEN_LEN;
-                frame_args.push_back(Some(frame_arg));
-            }
-        });
-        if status == Incomplete {
-            args.push(arg);
-            break;
-        } else if status == CompleteAtTheEnd {
-            args.push(Bytes::new());
-            break;
-        }
-    }
-    frame_args
-}
-
-fn calculate_payload_limit(fields_len: usize) -> usize {
-    //64KiB max frame size - header size -1 (flag) - serialized fields size
-    FRAME_MAX_LENGTH as usize - FRAME_HEADER_LENGTH as usize - 1 - fields_len
-}
-
-fn create_tracing() -> Tracing {
-    Tracing::new(0, 0, 0, TraceFlags::NONE)
-}
-
-fn calculate_checksum(args: &VecDeque<Option<Bytes>>, csum_type: ChecksumType) -> Option<u32> {
-    match csum_type {
-        ChecksumType::None => None,
-        other => todo!("Unsupported checksum type {:?}", other),
-    }
-}
-
-fn create_headers(arg_scheme: ArgSchemeValue, service_name: String) -> HashMap<String, String> {
-    let mut headers = HashMap::new();
-    headers.insert(
-        TransportHeader::ArgSchemeKey.to_string(),
-        arg_scheme.to_string(),
-    );
-    headers.insert(CallerNameKey.to_string(), service_name);
-    headers
 }
 
 fn fragment_arg(arg: &mut Bytes, payload_limit: usize) -> (FragmentationStatus, Option<Bytes>) {
@@ -150,10 +140,62 @@ fn fragment_arg(arg: &mut Bytes, payload_limit: usize) -> (FragmentationStatus, 
     }
 }
 
-fn get_frame_flag(remaining_args: &Vec<Bytes>) -> Flags {
-    if remaining_args.is_empty() {
-        Flags::NONE
-    } else {
-        Flags::MORE_FRAGMENTS_FOLLOW
+fn calculate_payload_limit(fields_len: usize) -> usize {
+    //64KiB max frame size - header size -1 (flag) - serialized fields size
+    FRAME_MAX_LENGTH as usize - FRAME_HEADER_LENGTH as usize - 1 - fields_len
+}
+
+fn create_tracing() -> Tracing {
+    Tracing::new(0, 0, 0, TraceFlags::NONE)
+}
+
+fn calculate_checksum(args: &VecDeque<Option<Bytes>>, csum_type: ChecksumType) -> Option<u32> {
+    match csum_type {
+        ChecksumType::None => None,
+        other => todo!("Unsupported checksum type {:?}", other),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::channel::frames::payloads::CallRequest;
+    use futures::StreamExt;
+    use tokio_test::*;
+
+    const service_name: &str = "test_service";
+    const arg_scheme: ArgSchemeValue = ArgSchemeValue::Json;
+
+    #[test]
+    fn single_frame() {
+        // Given
+        let args = [Bytes::from("a"), Bytes::from("b"), Bytes::from("c")].to_vec();
+        let fragmenter = Fragmenter::new(service_name.to_string(), arg_scheme, args);
+        // When
+        let frames_res = fragmenter.create_frames();
+        // Then
+        assert!(!frames_res.is_err(), frames_res.err().unwrap());
+        let mut frames: Vec<TFrame> = block_on(frames_res.unwrap().collect());
+        assert_eq!(frames.len(), 1);
+        let mut frame = frames.pop().unwrap();
+        assert_eq!(Type::CallRequest, *frame.frame_type());
+        let mut call_req_res = CallRequest::decode(frame.payload_mut());
+        assert!(!call_req_res.is_err(), call_req_res.err().unwrap());
+        let mut call_req = call_req_res.unwrap();
+        assert_eq!(Flags::NONE, *call_req.flags());
+        assert_eq!(service_name.to_string(), *call_req.fields().service());
+        assert_eq!(
+            arg_scheme.to_string(),
+            *call_req
+                .fields()
+                .headers()
+                .get(&TransportHeader::ArgSchemeKey.to_string())
+                .unwrap()
+        );
+        assert_eq!(ChecksumType::None, *call_req.args().checksum_type());
+        let args = call_req.args_mut().args_mut();
+        assert_eq!(Bytes::from("a"), args.get(0).unwrap().as_ref().unwrap());
+        assert_eq!(Bytes::from("b"), args.get(1).unwrap().as_ref().unwrap());
+        assert_eq!(Bytes::from("c"), args.get(2).unwrap().as_ref().unwrap());
     }
 }

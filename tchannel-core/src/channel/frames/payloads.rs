@@ -81,11 +81,15 @@ bitflags! {
     }
 }
 
-#[derive(Debug, new)]
+#[derive(Debug, Getters, new)]
 pub struct Tracing {
+    #[get = "pub"]
     span_id: u64,
+    #[get = "pub"]
     parent_id: u64,
+    #[get = "pub"]
     trace_id: u64,
+    #[get = "pub"]
     trace_flags: TraceFlags,
 }
 
@@ -143,8 +147,8 @@ pub struct CallArgs {
     #[get = "pub"]
     /// (csum:4){0,1}
     checksum: Option<u32>,
-    #[get_mut = "pub"]
     #[get = "pub"]
+    #[get_mut = "pub"]
     /// arg1~2 arg2~2 arg3~2
     pub args: VecDeque<Option<Bytes>>, //TODO consider using references
 }
@@ -166,12 +170,15 @@ impl Codec for CallArgs {
     }
 }
 
-#[derive(Debug, new)]
+#[derive(Debug, Getters, new)]
 pub struct CallFieldsEncoded {
+    #[get = "pub"]
     /// flags:1
     flags: Flags,
+    #[get = "pub"]
     /// ttl, tracing, service name, headers
     fields: Bytes,
+    #[get = "pub"]
     /// checksum type, checksum, args
     args: CallArgs,
 }
@@ -193,14 +200,18 @@ impl Codec for CallFieldsEncoded {
     }
 }
 
-#[derive(Debug, new)]
+#[derive(Debug, Getters, new)]
 pub struct CallRequestFields {
+    #[get = "pub"]
     /// ttl:4
     ttl: u32,
+    #[get = "pub"]
     /// tracing:25
     tracing: Tracing,
+    #[get = "pub"]
     /// service~1
     service: String,
+    #[get = "pub"]
     /// nh:1 (hk~1, hv~1){nh}
     headers: HashMap<String, String>,
 }
@@ -224,12 +235,16 @@ impl Codec for CallRequestFields {
     }
 }
 
-#[derive(Debug, new)]
+#[derive(Debug, Getters, MutGetters, new)]
 pub struct CallRequest {
+    #[get = "pub"]
     /// flags:1
     flags: Flags,
+    #[get = "pub"]
     /// ttl, tracing, service name, headers
     fields: CallRequestFields,
+    #[get = "pub"]
+    #[get_mut = "pub"]
     /// checksum type, checksum, args
     args: CallArgs,
 }
@@ -338,12 +353,15 @@ impl Codec for CallContinue {
     }
 }
 
-#[derive(Debug, new)]
+#[derive(Debug, Getters, new)]
 pub struct Cancel {
+    #[get = "pub"]
     /// ttl:4
     ttl: u32,
+    #[get = "pub"]
     /// tracing:25
     tracing: Tracing,
+    #[get = "pub"]
     why: String,
 }
 
@@ -364,10 +382,12 @@ impl Codec for Cancel {
     }
 }
 
-#[derive(Debug, new)]
+#[derive(Debug, Getters, new)]
 pub struct Claim {
+    #[get = "pub"]
     /// ttl:4
     ttl: u32,
+    #[get = "pub"]
     /// tracing:25
     tracing: Tracing,
 }

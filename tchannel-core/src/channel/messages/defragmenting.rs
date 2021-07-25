@@ -82,10 +82,10 @@ impl<RES: Response> Defragmenter<RES> {
     fn verify_headers(&self, headers: &HashMap<String, String>) -> Result<(), TChannelError> {
         if let Some(scheme) = headers.get(TransportHeader::ArgSchemeKey.to_string().as_str()) {
             //TODO ugly
-            if !scheme.eq(RES::arg_scheme().to_string().as_str()) {
+            if !scheme.eq(RES::args_scheme().to_string().as_str()) {
                 return Err(TChannelError::Error(format!(
                     "Expected arg scheme '{}' received '{}'",
-                    RES::arg_scheme().to_string(),
+                    RES::args_scheme().to_string(),
                     scheme
                 )));
             }

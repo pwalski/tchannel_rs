@@ -1,10 +1,8 @@
 use crate::channel::frames::headers::ArgSchemeValue;
 use crate::channel::frames::payloads::ResponseCode;
-
 use crate::error::{CodecError, TChannelError};
 use async_trait::async_trait;
 use bytes::Bytes;
-
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::net::SocketAddr;
@@ -15,8 +13,8 @@ pub mod raw;
 pub mod thrift;
 
 pub trait Message: Debug + Sized + Send {
-    fn arg_scheme() -> ArgSchemeValue;
-    fn args(self) -> Vec<Bytes>;
+    fn args_scheme() -> ArgSchemeValue;
+    fn to_args(self) -> Vec<Bytes>;
 }
 
 pub trait Request: Message {}
