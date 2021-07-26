@@ -1,3 +1,4 @@
+use crate::channel::frames::{FRAME_HEADER_LENGTH, FRAME_MAX_LENGTH};
 use crate::error::CodecError;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use num_traits::FromPrimitive;
@@ -516,16 +517,13 @@ fn encode_args(args: VecDeque<Option<Bytes>>, dst: &mut BytesMut) -> Result<(), 
         match arg {
             None => dst.put_u16(0),
             Some(arg) => {
-                let len = arg.len();
-                if dst.remaining() < len + ARG_LEN_LEN {
-                    return Err(CodecError::Error(
-                        "Not enough capacity to encode arg".to_owned(),
-                    ));
-                }
-                dst.put_u16(len as u16);
+                dst.put_u16(arg.len() as u16);
                 dst.put_slice(arg.as_ref()); // take len bytes from above
             }
         }
+    }
+    if dst.len() > (FRAME_MAX_LENGTH - FRAME_HEADER_LENGTH) as usize {
+        return Err(CodecError::Error(format!("Frame to long: {}", dst.len())));
     }
     Ok(())
 }
