@@ -10,14 +10,18 @@ use std::collections::VecDeque;
 use crate::error::CodecError;
 use std::string::FromUtf8Error;
 
-#[derive(Default, Debug, Builder, Getters, new)]
+#[derive(Default, Debug, Builder, Getters, MutGetters, new)]
 #[builder(pattern = "owned")]
 pub struct RawMessage {
     //arg1
+    #[get = "pub"]
     endpoint: String,
     //arg2
+    #[get = "pub"]
     header: String,
     //arg3
+    #[get = "pub"]
+    #[get_mut = "pub"]
     body: Bytes,
 }
 

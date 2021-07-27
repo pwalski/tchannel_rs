@@ -26,7 +26,7 @@ pub trait Codec: Sized {
     }
 }
 
-#[derive(Copy, Clone, Debug, FromPrimitive, PartialEq, ToPrimitive)]
+#[derive(Copy, Clone, Debug, PartialEq, FromPrimitive, ToPrimitive)]
 pub enum ChecksumType {
     None = 0x00,
     // crc-32 (adler-32)
@@ -37,13 +37,13 @@ pub enum ChecksumType {
     Crc32C = 0x03,
 }
 
-#[derive(Copy, Clone, Debug, FromPrimitive, ToPrimitive)]
+#[derive(Copy, Clone, Debug, PartialEq, FromPrimitive, ToPrimitive)]
 pub enum ResponseCode {
     Ok = 0x00,
     Error = 0x01,
 }
 
-#[derive(Copy, Clone, Debug, FromPrimitive, ToPrimitive)]
+#[derive(Copy, Clone, Debug, PartialEq, FromPrimitive, ToPrimitive)]
 pub enum ErrorCode {
     /// Not a valid value for code. Do not use.
     Invalid = 0x00,
@@ -82,7 +82,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Getters, new)]
+#[derive(Debug, PartialEq, Getters, new)]
 pub struct Tracing {
     #[get = "pub"]
     span_id: u64,
@@ -409,7 +409,7 @@ impl Codec for Claim {
 
 // pub struct PingResponse {} // no body
 
-#[derive(Debug, new)]
+#[derive(Debug, PartialEq, new)]
 pub struct ErrorMsg {
     code: ErrorCode,
     tracing: Tracing,
@@ -523,7 +523,7 @@ fn encode_args(args: VecDeque<Option<Bytes>>, dst: &mut BytesMut) -> Result<(), 
         }
     }
     if dst.len() > (FRAME_MAX_LENGTH - FRAME_HEADER_LENGTH) as usize {
-        return Err(CodecError::Error(format!("Frame to long: {}", dst.len())));
+        return Err(CodecError::Error(format!("Frame too long: {}", dst.len())));
     }
     Ok(())
 }
