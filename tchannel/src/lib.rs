@@ -1,4 +1,7 @@
-// extern crate num;
+//! # TChannel protocol
+//!
+//! Implementation of Uber's [TChannel](https://github.com/uber/tchannel) network multiplexing (NYI) and framing RPC protocol.
+//! Library allows to implement both client and server (NYI).
 
 #[macro_use]
 extern crate getset;

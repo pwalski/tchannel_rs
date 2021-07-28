@@ -1,5 +1,5 @@
 [package]
-name = "tchannel-example"
+name = "tchannel-examples"
 version = "0.1.0"
 authors = ["Przemysław Walski <pwalski@users.noreply.github.com>"]
 edition = "2018"
@@ -7,7 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tchannel = { path = "../tchannel-core" }
+tchannel = { path = "../tchannel" }
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.6", features = ["full"] }
 tokio-stream = { version = "0.1" }

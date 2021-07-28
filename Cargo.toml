@@ -1,6 +1,6 @@
 [workspace]
 
 members = [
-    "tchannel-core",
-    "tchannel-example"
+    "tchannel",
+    "tchannel-examples"
 ]
