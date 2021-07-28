@@ -1,7 +1,7 @@
 use std::string::FromUtf8Error;
 
-use crate::channel::frames::payloads::ErrorMsg;
-use crate::channel::frames::{TFrame, TFrameId, Type};
+use crate::frames::payloads::ErrorMsg;
+use crate::frames::{TFrame, TFrameId, Type};
 use bb8::RunError;
 use std::fmt::{Display, Formatter};
 use thiserror::Error;
@@ -128,5 +128,3 @@ impl From<String> for CodecError {
         CodecError::Error(err)
     }
 }
-
-pub type Error = Box<dyn std::error::Error + Send + Sync>;

@@ -1,11 +1,11 @@
-use crate::channel::connection::FrameInput;
-use crate::channel::frames::headers::TransportHeader;
-use crate::channel::frames::payloads::{
+use crate::connection::FrameInput;
+use crate::errors::{CodecError, TChannelError};
+use crate::frames::headers::TransportHeader;
+use crate::frames::payloads::{
     CallArgs, CallContinue, CallResponse, ChecksumType, Codec, Flags, ResponseCode,
 };
-use crate::channel::frames::Type;
-use crate::channel::messages::Response;
-use crate::error::{CodecError, TChannelError};
+use crate::frames::Type;
+use crate::messages::{Message, Response};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
@@ -36,7 +36,7 @@ impl<RES: Response> Defragmenter<RES> {
         if let Some(frame_id) = self.frame_input.recv().await {
             debug!("Received response id: {}", frame_id.id());
             let mut frame = frame_id.frame;
-            if (*frame.frame_type() != Type::CallResponse) {
+            if *frame.frame_type() != Type::CallResponse {
                 Err(CodecError::Error(format!(
                     "Expected '{:?}' got '{:?}'",
                     Type::CallResponse,
@@ -163,14 +163,14 @@ impl ArgsDefragmenter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::channel::frames::headers::ArgSchemeValue;
-    use crate::channel::frames::headers::TransportHeader::ArgSchemeKey;
-    use crate::channel::frames::payloads::{
+    use crate::frames::headers::ArgSchemeValue;
+    use crate::frames::headers::TransportHeader::ArgSchemeKey;
+    use crate::frames::payloads::{
         CallRequest, CallRequestFields, CallResponseFields, TraceFlags, Tracing,
     };
-    use crate::channel::frames::{TFrame, TFrameId};
-    use crate::channel::messages::raw::RawMessage;
-    use crate::channel::messages::Message;
+    use crate::frames::{TFrame, TFrameId};
+    use crate::messages::raw::RawMessage;
+    use crate::messages::Message;
     use tokio::sync::mpsc::Receiver;
     use tokio_test::*;
 

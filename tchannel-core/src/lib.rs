@@ -1,5 +1,4 @@
-extern crate core;
-extern crate num;
+// extern crate num;
 
 #[macro_use]
 extern crate getset;
@@ -19,6 +18,16 @@ extern crate bitflags;
 #[macro_use]
 extern crate log;
 
-pub mod channel;
-pub mod error;
-pub mod handlers;
+pub(crate) mod channel;
+pub(crate) mod connection;
+pub(crate) mod defragmentation;
+pub(crate) mod fragmentation;
+pub(crate) mod frames;
+pub(crate) mod handler;
+
+pub mod errors;
+pub mod messages;
+
+pub use self::channel::SubChannel;
+pub use self::channel::TChannel;
+pub use self::connection::ConnectionOptions;

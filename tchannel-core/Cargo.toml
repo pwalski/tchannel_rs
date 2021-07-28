@@ -30,3 +30,9 @@ derive-new = "0.5"
 
 [dev-dependencies]
 tokio-test = "*"
+
+[profile.dev]
+opt-level = 0
+
+[profile.release]
+opt-level = 3

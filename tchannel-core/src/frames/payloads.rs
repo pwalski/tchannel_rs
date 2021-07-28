@@ -1,5 +1,5 @@
-use crate::channel::frames::{FRAME_HEADER_LENGTH, FRAME_MAX_LENGTH};
-use crate::error::CodecError;
+use crate::errors::CodecError;
+use crate::frames::{FRAME_HEADER_LENGTH, FRAME_MAX_LENGTH};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use num_traits::FromPrimitive;
 use std::collections::{HashMap, VecDeque};

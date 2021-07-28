@@ -1,14 +1,14 @@
-use crate::channel::frames::headers::TransportHeader::CallerNameKey;
-use crate::channel::frames::headers::{ArgSchemeValue, TransportHeader};
-use crate::channel::frames::payloads::Codec;
-use crate::channel::frames::payloads::{
+use crate::errors::TChannelError;
+use crate::fragmentation::FragmentationStatus::{CompleteAtTheEnd, Incomplete};
+use crate::frames::headers::TransportHeader::CallerNameKey;
+use crate::frames::headers::{ArgSchemeValue, TransportHeader};
+use crate::frames::payloads::Codec;
+use crate::frames::payloads::{
     CallArgs, CallContinue, CallFieldsEncoded, CallRequestFields, ChecksumType, Flags, TraceFlags,
     Tracing, ARG_LEN_LEN,
 };
-use crate::channel::frames::{TFrame, TFrameStream, Type, FRAME_HEADER_LENGTH, FRAME_MAX_LENGTH};
-use crate::channel::messages::fragmenting::FragmentationStatus::{CompleteAtTheEnd, Incomplete};
-use crate::channel::messages::{Message, Request};
-use crate::error::TChannelError;
+use crate::frames::{TFrame, TFrameStream, Type, FRAME_HEADER_LENGTH, FRAME_MAX_LENGTH};
+use crate::messages::{Message, Request};
 use bytes::Buf;
 use bytes::{Bytes, BytesMut};
 use std::collections::{HashMap, VecDeque};
@@ -171,7 +171,9 @@ fn calculate_checksum(args: &VecDeque<Option<Bytes>>, csum_type: ChecksumType) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::channel::frames::payloads::CallRequest;
+    use crate::frames::payloads::CallContinue;
+    use crate::frames::payloads::CallRequest;
+    use crate::frames::TFrame;
     use futures::StreamExt;
     use tokio_test::*;
 

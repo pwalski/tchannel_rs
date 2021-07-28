@@ -1,17 +1,12 @@
-pub mod connection;
-pub mod frames;
-pub mod messages;
-
-use crate::channel::connection::{
-    ConnectionOptions, ConnectionPools, ConnectionPoolsBuilder, FrameInput, FrameOutput,
-};
-use crate::channel::frames::payloads::ResponseCode;
-use crate::channel::frames::TFrameStream;
-use crate::channel::messages::defragmenting::Defragmenter;
-use crate::channel::messages::fragmenting::Fragmenter;
-use crate::channel::messages::{Request, Response};
-use crate::error::{ConnectionError, TChannelError};
-use crate::handlers::RequestHandler;
+use crate::connection::pool::{ConnectionPools, ConnectionPoolsBuilder};
+use crate::connection::{ConnectionOptions, FrameInput, FrameOutput};
+use crate::defragmentation::Defragmenter;
+use crate::errors::{ConnectionError, TChannelError};
+use crate::fragmentation::Fragmenter;
+use crate::frames::payloads::ResponseCode;
+use crate::frames::TFrameStream;
+use crate::handler::RequestHandler;
+use crate::messages::{Request, Response};
 use futures::future::lazy;
 use futures::join;
 use futures::FutureExt;
@@ -76,8 +71,9 @@ impl TChannel {
 pub struct SubChannel {
     service_name: String,
     connection_pools: Arc<ConnectionPools>,
-    #[builder(setter(skip))]
-    handlers: HashMap<String, Box<RequestHandler>>,
+    //TODO handle handlers
+    // #[builder(setter(skip))]
+    // handlers: HashMap<String, Box<RequestHandler>>,
 }
 
 impl SubChannel {
@@ -85,11 +81,11 @@ impl SubChannel {
         unimplemented!()
     }
 
-    async fn send<REQ: Request, RES: Response>(
+    pub(super) async fn send<REQ: Request, RES: Response>(
         &self,
         request: REQ,
         host: SocketAddr,
-    ) -> Result<(ResponseCode, RES), crate::error::TChannelError> {
+    ) -> Result<(ResponseCode, RES), crate::errors::TChannelError> {
         let (connection_res, frames_res) = join!(self.connect(host), self.create_frames(request));
         let (frames_out, frames_in) = connection_res?;
         send_frames(frames_res?, &frames_out).await?;

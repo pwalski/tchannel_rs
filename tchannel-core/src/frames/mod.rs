@@ -1,7 +1,7 @@
 pub mod headers;
 pub mod payloads;
 
-use crate::error::CodecError;
+use crate::errors::CodecError;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::Stream;
 use std::pin::Pin;
@@ -76,7 +76,7 @@ pub struct TFrameId {
 pub struct TFrameIdCodec {}
 
 impl Encoder<TFrameId> for TFrameIdCodec {
-    type Error = crate::error::CodecError;
+    type Error = crate::errors::CodecError;
 
     fn encode(&mut self, item: TFrameId, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let frame = item.frame();
@@ -96,7 +96,7 @@ impl Encoder<TFrameId> for TFrameIdCodec {
 
 impl Decoder for TFrameIdCodec {
     type Item = TFrameId;
-    type Error = crate::error::CodecError;
+    type Error = crate::errors::CodecError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         if src.is_empty() {
