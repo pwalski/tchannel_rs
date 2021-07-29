@@ -1,14 +1,13 @@
 use crate::errors::TChannelError;
 use crate::fragmentation::FragmentationStatus::{CompleteAtTheEnd, Incomplete};
-use crate::frames::headers::TransportHeader::CallerNameKey;
-use crate::frames::headers::{ArgSchemeValue, TransportHeader};
+use crate::frames::headers::TransportHeaderKey::CallerName;
+use crate::frames::headers::{ArgSchemeValue, TransportHeaderKey};
 use crate::frames::payloads::Codec;
 use crate::frames::payloads::{
     CallArgs, CallContinue, CallFieldsEncoded, CallRequestFields, ChecksumType, Flags, TraceFlags,
     Tracing, ARG_LEN_LEN,
 };
 use crate::frames::{TFrame, TFrameStream, Type, FRAME_HEADER_LENGTH, FRAME_MAX_LENGTH};
-use crate::messages::{Message, Request};
 use bytes::Buf;
 use bytes::{Bytes, BytesMut};
 use std::collections::{HashMap, VecDeque};
@@ -65,10 +64,10 @@ impl Fragmenter {
     fn create_headers(&self) -> HashMap<String, String> {
         let mut headers = HashMap::new();
         headers.insert(
-            TransportHeader::ArgSchemeKey.to_string(),
+            TransportHeaderKey::ArgScheme.to_string(),
             self.arg_scheme.to_string(),
         );
-        headers.insert(CallerNameKey.to_string(), self.service_name.clone());
+        headers.insert(CallerName.to_string(), self.service_name.clone());
         headers
     }
 
@@ -85,17 +84,19 @@ impl Fragmenter {
         checksum_type: ChecksumType,
     ) -> VecDeque<Option<Bytes>> {
         let mut frame_args = VecDeque::with_capacity(3);
-        let mut remaining_limit = payload_limit - checksum_len(checksum_type);
+        let mut remaining_limit = payload_limit as i32 - checksum_len(checksum_type) as i32;
         while let Some(mut arg) = self.args.pop() {
-            remaining_limit -= ARG_LEN_LEN;
-            let (status, frame_arg_bytes) = fragment_arg(&mut arg, remaining_limit);
-            frame_arg_bytes.map(|frame_arg| match frame_arg.len() {
-                0 => frame_args.push_back(None),
-                len => {
-                    remaining_limit -= len;
-                    frame_args.push_back(Some(frame_arg));
+            remaining_limit -= ARG_LEN_LEN as i32;
+            let (status, frame_arg_res) = fragment_arg(&mut arg, remaining_limit);
+            if let Some(frame_arg) = frame_arg_res {
+                match frame_arg.len() {
+                    0 => frame_args.push_back(None),
+                    len => {
+                        remaining_limit -= len as i32;
+                        frame_args.push_back(Some(frame_arg));
+                    }
                 }
-            });
+            }
             if status == Incomplete {
                 self.args.push(arg);
                 break;
@@ -126,14 +127,14 @@ enum FragmentationStatus {
     Incomplete,
 }
 
-fn fragment_arg(arg: &mut Bytes, payload_limit: usize) -> (FragmentationStatus, Option<Bytes>) {
-    let src_remaining = arg.remaining();
+fn fragment_arg(arg: &mut Bytes, payload_limit: i32) -> (FragmentationStatus, Option<Bytes>) {
+    let src_remaining = arg.remaining() as i32;
     if src_remaining == 0 {
         (FragmentationStatus::Complete, None)
-    } else if payload_limit <= 0 {
+    } else if payload_limit < 0 {
         (FragmentationStatus::Incomplete, None)
     } else if src_remaining > payload_limit {
-        let fragment = arg.split_to(payload_limit);
+        let fragment = arg.split_to(payload_limit as usize);
         (FragmentationStatus::Incomplete, Some(fragment))
     } else {
         let arg_bytes = arg.split_to(arg.len());
@@ -161,7 +162,7 @@ fn checksum_len(checksum_type: ChecksumType) -> usize {
     }
 }
 
-fn calculate_checksum(args: &VecDeque<Option<Bytes>>, csum_type: ChecksumType) -> Option<u32> {
+fn calculate_checksum(_args: &VecDeque<Option<Bytes>>, csum_type: ChecksumType) -> Option<u32> {
     match csum_type {
         ChecksumType::None => None,
         other => todo!("Unsupported checksum type {:?}", other),
@@ -177,34 +178,34 @@ mod tests {
     use futures::StreamExt;
     use tokio_test::*;
 
-    const service_name: &str = "test_service";
-    const arg_scheme: ArgSchemeValue = ArgSchemeValue::Json;
+    const SERVICE_NAME: &str = "test_service";
+    const ARG_SCHEME: ArgSchemeValue = ArgSchemeValue::Json;
 
     #[test]
     fn single_frame() {
         // Given
         let args = [Bytes::from("a"), Bytes::from("b"), Bytes::from("c")].to_vec();
-        let fragmenter = Fragmenter::new(service_name.to_string(), arg_scheme, args);
+        let fragmenter = Fragmenter::new(SERVICE_NAME.to_string(), ARG_SCHEME, args);
 
         // When
         let frames_res = fragmenter.create_frames();
 
         // Then
-        assert!(!frames_res.is_err(), frames_res.err().unwrap());
+        assert!(!frames_res.is_err(), "{}", frames_res.err().unwrap());
         let mut frames: Vec<TFrame> = block_on(frames_res.unwrap().collect());
         assert_eq!(frames.len(), 1);
         let mut frame = frames.pop().unwrap();
         assert_eq!(Type::CallRequest, *frame.frame_type());
-        let mut call_req_res = CallRequest::decode(frame.payload_mut());
-        assert!(!call_req_res.is_err(), call_req_res.err().unwrap());
+        let call_req_res = CallRequest::decode(frame.payload_mut());
+        assert!(!call_req_res.is_err(), "{}", call_req_res.err().unwrap());
         let mut call_req = call_req_res.unwrap();
         assert_eq!(Flags::NONE, *call_req.flags());
-        assert_eq!(service_name.to_string(), *call_req.fields().service());
+        assert_eq!(SERVICE_NAME.to_string(), *call_req.fields().service());
         let headers = call_req.fields().headers();
         assert_eq!(
-            arg_scheme.to_string(),
+            ARG_SCHEME.to_string(),
             *headers
-                .get(&TransportHeader::ArgSchemeKey.to_string())
+                .get(&TransportHeaderKey::ArgScheme.to_string())
                 .unwrap()
         );
         assert_eq!(ChecksumType::None, *call_req.args().checksum_type());
@@ -218,14 +219,14 @@ mod tests {
     fn multiple_frames() {
         // Given
         // arg1 will take whole 1st frame and part of 2nd frame
-        let arg1 = Bytes::from(vec!['a' as u8; (u16::MAX) as usize]);
+        let arg1 = Bytes::from(vec![b'a'; (u16::MAX) as usize]);
         // arg2 will take part of 2nd frame
-        let arg2 = Bytes::from(vec!['b' as u8; (u16::MAX / 2) as usize]);
+        let arg2 = Bytes::from(vec![b'b'; (u16::MAX / 2) as usize]);
         // arg3 will take remaining space of 2nd frame and part of 3rd frame
-        let arg3 = Bytes::from(vec!['c' as u8; (u16::MAX) as usize]);
+        let arg3 = Bytes::from(vec![b'c'; (u16::MAX) as usize]);
         let fragmenter = Fragmenter::new(
-            service_name.to_string(),
-            arg_scheme,
+            SERVICE_NAME.to_string(),
+            ARG_SCHEME,
             [arg1.clone(), arg2.clone(), arg3.clone()].to_vec(),
         );
 
@@ -233,7 +234,7 @@ mod tests {
         let frames_res = fragmenter.create_frames();
 
         // Then
-        assert!(!frames_res.is_err(), frames_res.err().unwrap());
+        assert!(!frames_res.is_err(), "{}", frames_res.err().unwrap());
         let mut frames: Vec<TFrame> = block_on(frames_res.unwrap().collect());
         assert_eq!(frames.len(), 3);
         frames.reverse();
@@ -242,9 +243,9 @@ mod tests {
         assert_eq!(Type::CallRequest, *frame.frame_type());
         let mut call_req = CallRequest::decode(frame.payload_mut()).unwrap();
         assert_eq!(Flags::MORE_FRAGMENTS_FOLLOW, *call_req.flags());
-        let mut args = call_req.args_mut().args_mut();
+        let args = call_req.args_mut().args_mut();
         assert_eq!(1, args.len());
-        let mut arg1_1 = args.pop_front().unwrap().unwrap();
+        let arg1_1 = args.pop_front().unwrap().unwrap();
         // frame 2
         let mut frame = frames.pop().unwrap();
         assert_eq!(Type::CallRequestContinue, *frame.frame_type());
@@ -252,9 +253,9 @@ mod tests {
         assert_eq!(Flags::MORE_FRAGMENTS_FOLLOW, *call_req.flags());
         let args = call_req.args_mut().args_mut();
         assert_eq!(3, args.len());
-        let mut arg1_2 = args.pop_front().unwrap().unwrap();
-        let mut arg2_1 = args.pop_front().unwrap().unwrap();
-        let mut arg3_1 = args.pop_front().unwrap().unwrap();
+        let arg1_2 = args.pop_front().unwrap().unwrap();
+        let arg2_1 = args.pop_front().unwrap().unwrap();
+        let arg3_1 = args.pop_front().unwrap().unwrap();
         // frame 3
         let mut frame = frames.pop().unwrap();
         assert_eq!(Type::CallRequestContinue, *frame.frame_type());
@@ -262,7 +263,7 @@ mod tests {
         assert_eq!(Flags::NONE, *call_req.flags());
         let args = call_req.args_mut().args_mut();
         assert_eq!(1, args.len());
-        let mut arg3_2 = args.pop_front().unwrap().unwrap();
+        let arg3_2 = args.pop_front().unwrap().unwrap();
         // verify args
         let len = arg1_1.len() + arg1_2.len();
         assert_eq!(arg1, arg1_1.chain(arg1_2).copy_to_bytes(len));

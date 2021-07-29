@@ -5,11 +5,8 @@ use crate::errors::{ConnectionError, TChannelError};
 use crate::fragmentation::Fragmenter;
 use crate::frames::payloads::ResponseCode;
 use crate::frames::TFrameStream;
-use crate::handler::RequestHandler;
 use crate::messages::{Request, Response};
-use futures::future::lazy;
 use futures::join;
-use futures::FutureExt;
 use futures::StreamExt;
 use futures::{future, TryStreamExt};
 use log::{debug, error};
@@ -77,7 +74,7 @@ pub struct SubChannel {
 }
 
 impl SubChannel {
-    pub fn register<HANDLER>(&mut self, handler_name: &str, handler: HANDLER) -> &Self {
+    pub fn register<HANDLER>(&mut self, _handler_name: &str, _handler: HANDLER) -> &Self {
         unimplemented!()
     }
 

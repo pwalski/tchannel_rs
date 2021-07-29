@@ -29,18 +29,19 @@
 //! ```
 //! use std::net::SocketAddr;
 //! use std::str::FromStr;
-//! use tchannel::*;
-//! use tokio::runtime::Runtime;//!
-//!
-//! let request = RawMessage::new("endpoint_name".into(), "header".into(), "payload".into());
-//! let host = SocketAddr::from_str("host_address:port")?;
+//! use tchannel::messages::raw::RawMessage;
+//! use tchannel::messages::MessageChannel;
+//! use tchannel::{TChannel,ConnectionOptions};
+//! use tokio::runtime::Runtime;
 //!
 //! Runtime::new().unwrap().spawn(async {
-//!     let mut tchannel = TChannel::new(ConnectionOptions::default())?;
-//!     let subchannel = tchannel.subchannel("server".to_owned()).await?;
+//!     let request = RawMessage::new("endpoint_name".into(), "header".into(), "payload".into());
+//!     let host = SocketAddr::from_str("host_address:port").unwrap();
+//!     let mut tchannel = TChannel::new(ConnectionOptions::default()).unwrap();
+//!     let subchannel = tchannel.subchannel("server".to_owned()).await.unwrap();
 //!     match subchannel.send(request, host).await {
-//!         Ok(response) => debug!("Response: {:?}", response),
-//!         Err(error) => debug!("Fail: {:?}", error),
+//!         Ok(response) => println!("Response: {:?}", response),
+//!         Err(error) => println!("Fail: {:?}", error),
 //!     }
 //! });
 //! ```

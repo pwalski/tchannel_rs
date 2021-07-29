@@ -8,7 +8,6 @@ use std::fmt::Write;
 
 /// Supported TChannel protocol version
 pub const PROTOCOL_VERSION: u16 = 2;
-pub const TRACING_HEADER_LENGTH: u8 = 25;
 /// According to protocol frames have arg1, arg2, arg3.
 /// Implementation uses Vec of Bytes with length 3.
 pub const MAX_FRAME_ARGS: usize = 3;
@@ -21,7 +20,7 @@ pub trait Codec: Sized {
 
     fn encode_bytes(self) -> Result<Bytes, CodecError> {
         let mut bytes = BytesMut::new();
-        self.encode(&mut bytes);
+        self.encode(&mut bytes)?;
         Ok(Bytes::from(bytes))
     }
 }
@@ -253,7 +252,7 @@ pub struct CallRequest {
 impl Codec for CallRequest {
     fn encode(self, dst: &mut BytesMut) -> Result<(), CodecError> {
         dst.put_u8(self.flags.bits());
-        self.fields.encode(dst);
+        self.fields.encode(dst)?;
         self.args.encode(dst)?;
         Ok(())
     }
@@ -451,9 +450,9 @@ fn encode_header_fields<T: TryFrom<usize>>(
     encode_string: &dyn Fn(String, &mut BytesMut) -> Result<(), CodecError>,
 ) -> Result<(), CodecError> {
     encode_len(dst, headers.len(), encode_len_fn)?;
-    for (headerKey, headerValue) in headers {
-        encode_string(headerKey, dst)?;
-        encode_string(headerValue, dst)?;
+    for (header_key, header_value) in headers {
+        encode_string(header_key, dst)?;
+        encode_string(header_value, dst)?;
     }
     Ok(())
 }
@@ -488,7 +487,7 @@ fn encode_checksum(
 ) -> Result<(), CodecError> {
     dst.put_u8(checksum_type as u8);
     if checksum_type != ChecksumType::None {
-        dst.put_u32(value.ok_or(CodecError::Error("Missing checksum value.".to_owned()))?)
+        dst.put_u32(value.ok_or_else(|| CodecError::Error("Missing checksum value.".to_owned()))?)
     }
     Ok(())
 }

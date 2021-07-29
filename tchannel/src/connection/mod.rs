@@ -1,14 +1,7 @@
 pub mod pool;
 
 use crate::errors::ConnectionError;
-use crate::errors::ConnectionError::{MessageError, UnexpectedResponseError};
-use crate::frames::payloads::ErrorMsg;
-use crate::frames::payloads::Init;
-use crate::frames::payloads::{Codec, PROTOCOL_VERSION};
-use crate::frames::{TFrame, TFrameId, TFrameIdCodec, Type};
-use async_trait::async_trait;
-use bb8::{ErrorSink, Pool, PooledConnection, RunError};
-use bytes::{Bytes, BytesMut};
+use crate::frames::{TFrame, TFrameId, TFrameIdCodec};
 use core::time::Duration;
 use futures::prelude::*;
 use futures::{self, SinkExt};
@@ -90,8 +83,8 @@ impl Connection {
         buffer_size: usize,
     ) -> Result<Connection, ConnectionError> {
         debug!("Connecting to {}", addr);
-        let tcpStream = TcpStream::connect(addr).await?;
-        let (read, write) = tcpStream.into_split();
+        let tcp_stream = TcpStream::connect(addr).await?;
+        let (read, write) = tcp_stream.into_split();
         let framed_read = FramedRead::new(read, TFrameIdCodec {});
         let framed_write = FramedWrite::new(write, TFrameIdCodec {});
         let (sender, receiver) = mpsc::channel::<TFrameId>(buffer_size);

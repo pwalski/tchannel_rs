@@ -1,12 +1,12 @@
 use log::{debug, error};
-use std::collections::HashMap;
+
 use std::net::SocketAddr;
 use std::str::FromStr;
 use tchannel::messages::raw::RawMessage;
 use tchannel::messages::MessageChannel;
 use tchannel::ConnectionOptions;
 use tchannel::TChannel;
-use tokio::net::lookup_host;
+
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 

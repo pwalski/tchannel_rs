@@ -9,7 +9,7 @@ pub struct ThriftMessage {}
 
 impl TryFrom<Vec<Bytes>> for ThriftMessage {
     type Error = CodecError;
-    fn try_from(args: Vec<Bytes>) -> Result<Self, Self::Error> {
+    fn try_from(_args: Vec<Bytes>) -> Result<Self, Self::Error> {
         todo!()
     }
 }

@@ -1,11 +1,11 @@
 use crate::connection::FrameInput;
 use crate::errors::{CodecError, TChannelError};
-use crate::frames::headers::TransportHeader;
+use crate::frames::headers::TransportHeaderKey;
 use crate::frames::payloads::{
     CallArgs, CallContinue, CallResponse, ChecksumType, Codec, Flags, ResponseCode,
 };
 use crate::frames::Type;
-use crate::messages::{Message, Response};
+use crate::messages::Response;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
@@ -37,11 +37,12 @@ impl<RES: Response> Defragmenter<RES> {
             debug!("Received response id: {}", frame_id.id());
             let mut frame = frame_id.frame;
             if *frame.frame_type() != Type::CallResponse {
-                Err(CodecError::Error(format!(
+                return Err(CodecError::Error(format!(
                     "Expected '{:?}' got '{:?}'",
                     Type::CallResponse,
                     frame.frame_type()
-                )))?
+                ))
+                .into());
             }
             let response = CallResponse::decode(frame.payload_mut())?;
             self.verify_headers(response.fields().headers())?;
@@ -87,7 +88,7 @@ impl<RES: Response> Defragmenter<RES> {
     }
 
     fn verify_headers(&self, headers: &HashMap<String, String>) -> Result<(), TChannelError> {
-        if let Some(scheme) = headers.get(TransportHeader::ArgSchemeKey.to_string().as_str()) {
+        if let Some(scheme) = headers.get(TransportHeaderKey::ArgScheme.to_string().as_str()) {
             //TODO ugly
             if !scheme.eq(RES::args_scheme().to_string().as_str()) {
                 return Err(TChannelError::Error(format!(
@@ -124,7 +125,7 @@ impl ArgsDefragmenter {
         self.add_remaining_args(frame_args);
     }
 
-    fn add_first_arg(&mut self, mut frame_arg: Option<Bytes>) {
+    fn add_first_arg(&mut self, frame_arg: Option<Bytes>) {
         match frame_arg {
             Some(frame_arg_bytes) => match self.args.pop() {
                 Some(mut previous_incomplete_arg) => {
@@ -141,7 +142,7 @@ impl ArgsDefragmenter {
         }
     }
 
-    fn add_remaining_args(&mut self, mut frame_args: VecDeque<Option<Bytes>>) {
+    fn add_remaining_args(&mut self, frame_args: VecDeque<Option<Bytes>>) {
         for frame_arg in frame_args {
             match frame_arg {
                 None => self.args.push(BytesMut::new()), // empty arg
@@ -164,18 +165,18 @@ impl ArgsDefragmenter {
 mod tests {
     use super::*;
     use crate::frames::headers::ArgSchemeValue;
-    use crate::frames::headers::TransportHeader::ArgSchemeKey;
+    use crate::frames::headers::TransportHeaderKey::ArgScheme;
     use crate::frames::payloads::{
         CallRequest, CallRequestFields, CallResponseFields, TraceFlags, Tracing,
     };
     use crate::frames::{TFrame, TFrameId};
     use crate::messages::raw::RawMessage;
     use crate::messages::Message;
-    use tokio::sync::mpsc::Receiver;
+
     use tokio_test::*;
 
-    const service_name: &str = "test_service";
-    const arg_scheme: ArgSchemeValue = ArgSchemeValue::Raw;
+    const SERVICE_NAME: &str = "test_service";
+    const ARG_SCHEME: ArgSchemeValue = ArgSchemeValue::Raw;
 
     #[test]
     fn single_frame() {
@@ -188,13 +189,14 @@ mod tests {
         let call_args = CallArgs::new(ChecksumType::None, None, VecDeque::from(args));
         let tracing = Tracing::new(0, 0, 0, TraceFlags::NONE);
         let mut headers = HashMap::new();
-        headers.insert(ArgSchemeKey.to_string(), arg_scheme.to_string());
+        headers.insert(ArgScheme.to_string(), ARG_SCHEME.to_string());
         let call_fields = CallResponseFields::new(ResponseCode::Ok, tracing, headers);
         let request = CallResponse::new(Flags::NONE, call_fields, call_args);
         let frame = TFrame::new(Type::CallResponse, request.encode_bytes().unwrap());
         let frame_id = TFrameId::new(1, frame);
         let (sender, receiver) = tokio::sync::mpsc::channel::<TFrameId>(1);
-        block_on(sender.send(frame_id));
+        let send_result = block_on(sender.send(frame_id));
+        assert_ok!(send_result);
 
         // When
         let defragmenter = Defragmenter::new(receiver);
@@ -218,17 +220,18 @@ mod tests {
     fn wrong_frame() {
         // Given
         let args = [Bytes::from("a"), Bytes::from("b"), Bytes::from("c")].to_vec();
-        let some_args: Vec<Option<Bytes>> = args.clone().into_iter().map(|b| Some(b)).collect();
+        let some_args: Vec<Option<Bytes>> = args.into_iter().map(Some).collect();
         let call_args = CallArgs::new(ChecksumType::None, None, VecDeque::from(some_args));
         let tracing = Tracing::new(0, 0, 0, TraceFlags::NONE);
         let mut headers = HashMap::new();
-        headers.insert(ArgSchemeKey.to_string(), arg_scheme.to_string());
-        let call_fields = CallRequestFields::new(10_000, tracing, service_name.to_owned(), headers);
+        headers.insert(ArgScheme.to_string(), ARG_SCHEME.to_string());
+        let call_fields = CallRequestFields::new(10_000, tracing, SERVICE_NAME.to_owned(), headers);
         let request = CallRequest::new(Flags::NONE, call_fields, call_args);
         let frame = TFrame::new(Type::CallRequest, request.encode_bytes().unwrap());
         let frame_id = TFrameId::new(1, frame);
         let (sender, receiver) = tokio::sync::mpsc::channel::<TFrameId>(1);
-        block_on(sender.send(frame_id));
+        let send_result = block_on(sender.send(frame_id));
+        assert_ok!(send_result);
 
         // When
         let defragmenter = Defragmenter::new(receiver);
@@ -239,9 +242,9 @@ mod tests {
         assert!(response_res.is_err());
         let res = response_res.err().unwrap();
         assert_eq!(
-            TChannelError::CodecError(CodecError::Error(format!(
-                "Expected 'CallResponse' got 'CallRequest'"
-            ))),
+            TChannelError::CodecError(CodecError::Error(
+                "Expected 'CallResponse' got 'CallRequest'".to_string()
+            )),
             res
         );
     }

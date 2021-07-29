@@ -4,29 +4,16 @@ use crate::errors::ConnectionError::{MessageError, UnexpectedResponseError};
 use crate::frames::payloads::ErrorMsg;
 use crate::frames::payloads::Init;
 use crate::frames::payloads::{Codec, PROTOCOL_VERSION};
-use crate::frames::{TFrame, TFrameId, TFrameIdCodec, Type};
+use crate::frames::{TFrame, TFrameId, Type};
 use async_trait::async_trait;
 use bb8::{ErrorSink, Pool, PooledConnection, RunError};
 use bytes::{Bytes, BytesMut};
-use core::time::Duration;
-use futures::prelude::*;
-use futures::{self, SinkExt};
-use futures::{future, StreamExt};
 use log::{debug, error};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
-use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
-use tokio::net::TcpStream;
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::Mutex;
 use tokio::sync::RwLock;
-use tokio::task::JoinHandle;
-use tokio_stream::wrappers::ReceiverStream;
-use tokio_util::codec::{FramedRead, FramedWrite};
 
 #[derive(Debug, Default, Builder)]
 #[builder(pattern = "owned")]
@@ -111,7 +98,7 @@ impl bb8::ManageConnection for ConnectionManager {
         ping(conn).await
     }
 
-    fn has_broken(&self, conn: &mut Self::Connection) -> bool {
+    fn has_broken(&self, _conn: &mut Self::Connection) -> bool {
         debug!("Has broken? (not implemented)");
         false
     }
@@ -143,7 +130,7 @@ async fn verify(connection: Connection) -> Result<Connection, ConnectionError> {
 async fn init_handshake(connection: &Connection) -> Result<TFrameId, ConnectionError> {
     let mut bytes = BytesMut::new();
     let init = Init::default();
-    init.encode(&mut bytes);
+    init.encode(&mut bytes)?;
     let init_frame = TFrame::new(Type::InitRequest, bytes.freeze());
     connection.send_one(init_frame).await
 }
@@ -157,6 +144,6 @@ async fn ping(connection: &Connection) -> Result<(), ConnectionError> {
         .map(|mut frame| match frame.frame_type() {
             Type::PingResponse => Ok(()),
             Type::Error => Err(MessageError(ErrorMsg::decode(frame.payload_mut())?)),
-            frame_type => Err(UnexpectedResponseError(frame_type.clone())),
+            frame_type => Err(UnexpectedResponseError(*frame_type)),
         })?
 }

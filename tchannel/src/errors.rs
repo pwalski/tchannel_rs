@@ -1,11 +1,9 @@
-use std::string::FromUtf8Error;
-
 use crate::frames::payloads::ErrorMsg;
-use crate::frames::{TFrame, TFrameId, Type};
+use crate::frames::{TFrameId, Type};
 use bb8::RunError;
 use std::fmt::{Display, Formatter};
+use std::string::FromUtf8Error;
 use thiserror::Error;
-use tokio::sync::oneshot::error::RecvError;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum TChannelError {
@@ -67,14 +65,14 @@ pub enum ConnectionError {
 pub struct SendError(tokio::sync::mpsc::error::SendError<TFrameId>);
 
 impl PartialEq for SendError {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(&self, _other: &Self) -> bool {
         false
     }
 }
 
 impl Display for SendError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.fmt(f)
+        self.0.fmt(f)
     }
 }
 
@@ -82,14 +80,14 @@ impl Display for SendError {
 pub struct IoError(std::io::Error);
 
 impl PartialEq for IoError {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(&self, _other: &Self) -> bool {
         false
     }
 }
 
 impl Display for IoError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.fmt(f)
+        self.0.fmt(f)
     }
 }
 
