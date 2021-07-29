@@ -1,3 +1,5 @@
+![ci](https://github.com/pwalski/tchannel-rust/actions/workflows/ci.yml/badge.svg)
+
 # {{crate}}
 
 {{readme}}
