@@ -2,6 +2,10 @@
 
 TChannel is a network multiplexing and framing RPC protocol created by Uber ([protocol specs](https://github.com/uber/tchannel/blob/master/docs/protocol.md)).
 
+#### Disclaimer
+
+The project serves as an excuse to learn Rust therefore the implementation may be suboptimal and features are not tested properly.
+
 ### Overview
 
 Features of TChannel protocol implemented so far:
@@ -10,14 +14,18 @@ Features of TChannel protocol implemented so far:
  * [x] Multiplexing multiple requests across the same TCP socket,
  * [x] Out-of-order responses,
  * [ ] Streaming requests and responses,
- * [ ] Checksummed frames (only None),
- * [ ] Transport of arbitrary payloads (at the moment only Raw payloads),
-    * [ ] Thrift (WIP)
+ * [ ] Checksums of frame args (only None),
+ * [ ] Transport of arbitrary payloads:
+    * [ ] Thrift
     * [ ] SThrift (streaming Thrift)
     * [ ] JSON
     * [ ] HTTP
     * [x] Raw
 
+Additional nonfunctional TODOs:
+
+ * [ ] Proper tests (right now only few happy paths)
+ * [ ] Investigate WASI support
 
 ### Examples
 ```rust
