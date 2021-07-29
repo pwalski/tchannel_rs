@@ -7,7 +7,6 @@ use tchannel::messages::MessageChannel;
 use tchannel::ConnectionOptions;
 use tchannel::TChannel;
 
-
 type Error = Box<dyn std::error::Error + Send + Sync>;
 
 #[tokio::main]
