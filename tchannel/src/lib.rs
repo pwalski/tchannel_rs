@@ -1,9 +1,23 @@
-//! # TChannel protocol
+//! TChannel is a network multiplexing and framing RPC protocol created by Uber ([protocol specs](https://github.com/uber/tchannel/blob/master/docs/protocol.md)).
 //!
-//! Implementation of Uber's [TChannel](https://github.com/uber/tchannel) network multiplexing (NYI) and framing RPC protocol.
-//! Library allows to implement both client and server (NYI).
+//! ## Overview
 //!
-//! # Examples
+//! Features of TChannel protocol implemented so far:
+//!
+//!  * [x] A request/response model,
+//!  * [x] Multiplexing multiple requests across the same TCP socket,
+//!  * [x] Out-of-order responses,
+//!  * [ ] Streaming requests and responses,
+//!  * [ ] Checksummed frames (only None),
+//!  * [ ] Transport of arbitrary payloads (at the moment only Raw payloads),
+//!     * [ ] Thrift (WIP)
+//!     * [ ] SThrift (streaming Thrift)
+//!     * [ ] JSON
+//!     * [ ] HTTP
+//!     * [x] Raw
+//!
+//!
+//! ## Examples
 //! ```
 //! use std::net::SocketAddr;
 //! use std::str::FromStr;
@@ -19,9 +33,10 @@
 //!     match subchannel.send(request, host).await {
 //!         Ok(response) => debug!("Response: {:?}", response),
 //!         Err(error) => debug!("Fail: {:?}", error),
-//!     }//!
+//!     }
 //! });
 //! ```
+//!
 
 #[macro_use]
 extern crate getset;
