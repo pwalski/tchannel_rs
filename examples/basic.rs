@@ -1,11 +1,11 @@
-use log::{debug, error};
+use log::{error, info};
 
 use std::net::SocketAddr;
 use std::str::FromStr;
-use tchannel::messages::raw::RawMessage;
-use tchannel::messages::MessageChannel;
-use tchannel::ConnectionOptions;
-use tchannel::TChannel;
+use tchannel_protocol::messages::raw::RawMessage;
+use tchannel_protocol::messages::MessageChannel;
+use tchannel_protocol::ConnectionOptions;
+use tchannel_protocol::TChannel;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -24,10 +24,10 @@ async fn run() -> Result<(), Error> {
     let subchannel = tchannel.subchannel("server".to_owned()).await?;
     let request = RawMessage::new("pong".into(), "Marco".into(), "Ping!".into());
     let addr = SocketAddr::from_str("192.168.50.172:8888")?;
-    debug!("sending");
+    info!("sending");
     match subchannel.send(request, addr).await {
-        Ok(response) => debug!("Response: {:?}", response),
-        Err(error) => debug!("Fail: {:?}", error),
+        Ok(response) => info!("Response: {:?}", response),
+        Err(error) => info!("Fail: {:?}", error),
     }
     Ok(())
 }

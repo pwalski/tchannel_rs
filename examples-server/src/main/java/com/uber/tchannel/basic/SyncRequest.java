@@ -23,48 +23,27 @@
 package com.uber.tchannel.basic;
 
 import com.uber.tchannel.api.ResponseCode;
-import com.uber.tchannel.api.SubChannel;
 import com.uber.tchannel.api.TChannel;
-import com.uber.tchannel.api.TFuture;
 import com.uber.tchannel.api.handlers.RawRequestHandler;
-import com.uber.tchannel.api.handlers.TFutureCallback;
 import com.uber.tchannel.messages.RawRequest;
 import com.uber.tchannel.messages.RawResponse;
 
 import java.net.InetAddress;
-import java.util.concurrent.CountDownLatch;
 
-public final class AsyncRequest {
+public final class SyncRequest {
 
-    private AsyncRequest() {}
+    private SyncRequest() {}
 
     public static void main(String[] args) throws Exception {
         TChannel server = createServer();
-        TChannel client = createClient();
+//        server.listen().channel().closeFuture().sync();
+//        TChannel client = createClient();
 
-        SubChannel subChannel = client.makeSubChannel("server");
+//        SubChannel subChannel = client.makeSubChannel("server");
 
         final long start = System.currentTimeMillis();
-        final CountDownLatch done = new CountDownLatch(3);
 
-        TFutureCallback<RawResponse> callback = new TFutureCallback<RawResponse>() {
-            @Override
-            public void onResponse(RawResponse response) {
-                // when using callback, resource associated with response is released by the the TChannel library
-                if (!response.isError()) {
-                    System.out.println(String.format("Response received: response code: %s, header: %s, body: %s",
-                        response.getResponseCode(),
-                        response.getHeader(),
-                        response.getBody()));
-                } else {
-                    System.out.println(String.format("Got error response: %s",
-                        response.toString()));
-                }
-
-                done.countDown();
-            }
-        };
-
+        /*
         // send three requests
         for (int i = 0; i < 3; i++) {
             RawRequest request = new RawRequest.Builder("server", "pong")
@@ -76,22 +55,34 @@ public final class AsyncRequest {
                 8888
             );
 
-            future.addCallback(callback);
-        }
+            // Use the try-with-resources Statement to release resources when done
+            try (RawResponse response = future.get()) {
+                if (!response.isError()) {
+                    System.out.println(String.format("Response received: response code: %s, header: %s, body: %s",
+                        response.getResponseCode(),
+                        response.getHeader(),
+                        response.getBody()));
+                } else {
+                    System.out.println(String.format("Got error response: %s",
+                        response.toString()));
+                }
+            }
 
-        done.await();
+            System.out.println();
+        }
+        */
+
         System.out.println(String.format("%nTime cost: %dms", System.currentTimeMillis() - start));
 
         // close channels asynchronously
         server.shutdown(false);
-        client.shutdown(false);
+//        client.shutdown(false);
     }
 
     protected static TChannel createServer() throws Exception {
 
         // create TChannel
         TChannel tchannel = new TChannel.Builder("server")
-            .setServerHost(InetAddress.getByName(null))
             .setServerPort(8888)
             .build();
 
@@ -122,12 +113,16 @@ public final class AsyncRequest {
                                 .setBody("I feel bad ...")
                                 .build();
                         default:
-                            throw new UnsupportedOperationException("I feel very bad!");
+                            return new RawResponse.Builder(request)
+                                    .setTransportHeaders(request.getTransportHeaders())
+                                    .setHeader("Polo")
+                                    .setBody("Not again!")
+                                    .build();
                     }
                 }
             });
 
-        tchannel.listen();
+        tchannel.listen().channel().closeFuture().sync();
 
         return tchannel;
     }
@@ -142,5 +137,4 @@ public final class AsyncRequest {
         tchannel.makeSubChannel("server");
         return tchannel;
     }
-
 }

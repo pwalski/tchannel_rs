@@ -4,14 +4,14 @@ In TChannel-JAVA, the [SubChannel.send(...)](../tchannel-core/src/main/java/com/
 function returns a [future object](../tchannel-core/src/main/java/com/uber/tchannel/api/TFuture.java), which can either
 be used to access the response synchronously or asynchronously. They are the basic approaches of TChannel 
 protocol communication in JAVA. The synchronous and asynchronous examples are below.
-* [SyncRequest](./src/main/java/com/uber/tchannel/basic/SyncRequest.java)
-* [AsyncRequest](./src/main/java/com/uber/tchannel/basic/AsyncRequest.java)
+* [SyncRequest](src/main/java/com/uber/tchannel/basic/SyncRequest.java)
+* [AsyncRequest](src/main/java/com/uber/tchannel/basic/AsyncRequest.java)
 
 
 ## Run Examples
 
 ### 1. Requet Examples
-#### 1.1 [SyncRequest](./src/main/java/com/uber/tchannel/basic/SyncRequest.java)
+#### 1.1 [SyncRequest](src/main/java/com/uber/tchannel/basic/SyncRequest.java)
 **Command**:
 ```bash
 mvn package
@@ -32,7 +32,7 @@ Got error response: <ErrorResponse id=3 errorType=BadRequest message=Failed to h
 Time cost: 157ms
 ```
 
-#### 1.2 [AsyncRequest](./src/main/java/com/uber/tchannel/basic/AsyncRequest.java)
+#### 1.2 [AsyncRequest](src/main/java/com/uber/tchannel/basic/AsyncRequest.java)
 **Command**:
 ```bash
 mvn package
@@ -81,7 +81,7 @@ java -cp tchannel-example/target/tchannel-example.jar com.uber.tchannel.json.Jso
 
 **Output after receiving a client request**:
 ```bash
-<JsonRequest id=1 service=json-server transportHeaders={as=json, re=c, cn=json-server} arg1=json-endpoint arg2={} arg3={"requestId":0,"requestMessage":"hello?"}>
+<JsonRequest id=1 service=json-examples-server transportHeaders={as=json, re=c, cn=json-examples-server} arg1=json-endpoint arg2={} arg3={"requestId":0,"requestMessage":"hello?"}>
 ```
 
 #### 3.2. [JsonClient](./src/main/java/com/uber/tchannel/json/JsonClient.java)
@@ -123,7 +123,7 @@ Disconnected from KeyValue Server.
 **Command**:
 ```bash
 mvn package
-node server.js --port 21300 2>&1 | jq .
+node examples-server.js --port 21300 2>&1 | jq .
 java -cp tchannel-example/target/tchannel-example.jar com.uber.tchannel.hyperbahn.HyperbahnExample
 tcurl -p 127.0.0.1:21300 javaServer ping -j -2 "{}" -3 '{"request":"hello"}' | jq .
 ```

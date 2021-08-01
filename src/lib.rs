@@ -29,9 +29,9 @@
 //! ```
 //! use std::net::SocketAddr;
 //! use std::str::FromStr;
-//! use tchannel::messages::raw::RawMessage;
-//! use tchannel::messages::MessageChannel;
-//! use tchannel::{TChannel,ConnectionOptions};
+//! use tchannel_protocol::messages::raw::RawMessage;
+//! use tchannel_protocol::messages::MessageChannel;
+//! use tchannel_protocol::{TChannel,ConnectionOptions};
 //! use tokio::runtime::Runtime;
 //!
 //! Runtime::new().unwrap().spawn(async {

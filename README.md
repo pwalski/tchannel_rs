@@ -1,6 +1,6 @@
-![ci](https://github.com/pwalski/tchannel-rust/actions/workflows/ci.yml/badge.svg)
+[![build status](https://github.com/pwalski/tchannel-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/pwalski/tchannel-rust/actions)
 
-# tchannel
+# tchannel_protocol
 
 TChannel is a network multiplexing and framing RPC protocol created by Uber ([protocol specs](https://github.com/uber/tchannel/blob/master/docs/protocol.md)).
 
@@ -33,9 +33,9 @@ Additional nonfunctional TODOs:
 ```rust
 use std::net::SocketAddr;
 use std::str::FromStr;
-use tchannel::messages::raw::RawMessage;
-use tchannel::messages::MessageChannel;
-use tchannel::{TChannel,ConnectionOptions};
+use tchannel_protocol::messages::raw::RawMessage;
+use tchannel_protocol::messages::MessageChannel;
+use tchannel_protocol::{TChannel,ConnectionOptions};
 use tokio::runtime::Runtime;
 
 Runtime::new().unwrap().spawn(async {
@@ -56,19 +56,19 @@ Runtime::new().unwrap().spawn(async {
 Update of README
 ```shell
 cargo install cargo-readme
-cargo readme -r tchannel -t ../README.tpl > README.md
+cargo readme > README.md
 ```
 
 ## Examples Subproject
 
 Sample `tchannel-java` server:
 ```shell
-mvn -f tchannel-examples/server package exec:exec -Pserver
+mvn -f examples-server package exec:exec -Pserver
 ```
 
 Basic client scenario:
 ```shell
-RUST_LOG=DEBUG cargo run -p tchannel-examples --example basic
+RUST_LOG=DEBUG cargo run --example basic
 ```
 
 ---
