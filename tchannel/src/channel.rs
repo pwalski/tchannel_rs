@@ -31,40 +31,37 @@ impl TChannel {
         })
     }
 
-    pub async fn subchannel(
+    pub async fn subchannel<STR: AsRef<str>>(
         &mut self,
-        service_name: String,
+        service_name: STR,
     ) -> Result<Arc<SubChannel>, TChannelError> {
-        if let Some(subchannel) = self.subchannels.read().await.get(&service_name) {
+        if let Some(subchannel) = self.subchannels.read().await.get(service_name.as_ref()) {
             return Ok(subchannel.clone());
         }
         self.make_subchannel(service_name).await
     }
 
-    async fn make_subchannel(
+    async fn make_subchannel<STR: AsRef<str>>(
         &self,
-        service_name: String,
+        service_name: STR,
     ) -> Result<Arc<SubChannel>, TChannelError> {
         let mut subchannels = self.subchannels.write().await;
-        match subchannels.get(&service_name) {
+        match subchannels.get(service_name.as_ref()) {
             Some(subchannel) => Ok(subchannel.clone()),
             None => {
-                debug!("Creating subchannel {}", service_name);
-                let subchannel = Arc::new(
-                    SubChannelBuilder::default()
-                        .service_name(service_name.to_owned())
-                        .connection_pools(self.connection_pools.clone())
-                        .build()?,
-                );
-                subchannels.insert(service_name, subchannel.clone());
+                debug!("Creating subchannel {}", service_name.as_ref());
+                let subchannel = Arc::new(SubChannel::new(
+                    String::from(service_name.as_ref()),
+                    self.connection_pools.clone(),
+                ));
+                subchannels.insert(String::from(service_name.as_ref()), subchannel.clone());
                 Ok(subchannel)
             }
         }
     }
 }
 
-#[derive(Debug, Builder)]
-#[builder(pattern = "owned")]
+#[derive(Debug, new)]
 pub struct SubChannel {
     service_name: String,
     connection_pools: Arc<ConnectionPools>,

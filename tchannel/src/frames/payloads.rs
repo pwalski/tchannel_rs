@@ -554,21 +554,21 @@ fn decode_arg(src: &mut Bytes) -> Result<Option<Bytes>, CodecError> {
     }
 }
 
-fn encode_string(value: String, dst: &mut BytesMut) -> Result<(), CodecError> {
+fn encode_string<STR: AsRef<str>>(value: STR, dst: &mut BytesMut) -> Result<(), CodecError> {
     encode_string_field(value, dst, &BytesMut::put_u16)
 }
 
-fn encode_small_string(value: String, dst: &mut BytesMut) -> Result<(), CodecError> {
+fn encode_small_string<STR: AsRef<str>>(value: STR, dst: &mut BytesMut) -> Result<(), CodecError> {
     encode_string_field(value, dst, &BytesMut::put_u8)
 }
 
-fn encode_string_field<T: TryFrom<usize>>(
-    value: String,
+fn encode_string_field<T: TryFrom<usize>, STR: AsRef<str>>(
+    value: STR,
     dst: &mut BytesMut,
     encode_len_fn: &dyn Fn(&mut BytesMut, T),
 ) -> Result<(), CodecError> {
-    encode_len(dst, value.len(), encode_len_fn)?;
-    dst.write_str(value.as_str())?;
+    encode_len(dst, value.as_ref().len(), encode_len_fn)?;
+    dst.write_str(value.as_ref())?;
     Ok(())
 }
 
