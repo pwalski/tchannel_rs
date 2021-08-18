@@ -12,17 +12,23 @@ use bytes::Buf;
 use bytes::{Bytes, BytesMut};
 use std::collections::{HashMap, VecDeque};
 
-#[derive(Debug, new)]
+#[derive(Debug)]
 pub struct Fragmenter {
     service_name: String,
     arg_scheme: ArgSchemeValue,
-    args: Vec<Bytes>,
+    args: VecDeque<Bytes>,
 }
 
 impl Fragmenter {
-    pub fn create_frames(mut self) -> Result<TFrameStream, TChannelError> {
-        self.args.reverse();
+    pub fn new(service_name: String, arg_scheme: ArgSchemeValue, args: Vec<Bytes>) -> Fragmenter {
+        Fragmenter {
+            service_name,
+            arg_scheme,
+            args: VecDeque::from(args),
+        }
+    }
 
+    pub fn create_frames(mut self) -> Result<TFrameStream, TChannelError> {
         let request_fields = self.create_request_fields_bytes()?;
         let payload_limit = calculate_payload_limit(request_fields.len());
         let frame_args = self.next_frame_args(payload_limit);
@@ -85,7 +91,7 @@ impl Fragmenter {
     ) -> VecDeque<Option<Bytes>> {
         let mut frame_args = VecDeque::with_capacity(3);
         let mut remaining_limit = payload_limit as i32 - checksum_len(checksum_type) as i32;
-        while let Some(mut arg) = self.args.pop() {
+        while let Some(mut arg) = self.args.pop_front() {
             remaining_limit -= ARG_LEN_LEN as i32;
             let (status, frame_arg_res) = fragment_arg(&mut arg, remaining_limit);
             if let Some(frame_arg) = frame_arg_res {
@@ -98,10 +104,10 @@ impl Fragmenter {
                 }
             }
             if status == Incomplete {
-                self.args.push(arg);
+                self.args.push_front(arg);
                 break;
             } else if status == CompleteAtTheEnd {
-                self.args.push(Bytes::new());
+                self.args.push_front(Bytes::new());
                 break;
             }
         }
@@ -227,7 +233,7 @@ mod tests {
         let fragmenter = Fragmenter::new(
             SERVICE_NAME.to_string(),
             ARG_SCHEME,
-            [arg1.clone(), arg2.clone(), arg3.clone()].to_vec(),
+            [arg1.clone(), arg2.clone(), arg3.clone()].into(),
         );
 
         // When

@@ -1,7 +1,7 @@
-use crate::messages::{Request, Response};
+use crate::messages::Message;
 use async_trait::async_trait;
 
 #[async_trait]
 pub trait RequestHandler {
-    async fn handle<REQ: Request, RES: Response>(&self, request: REQ) -> RES;
+    async fn handle<REQ: Message, RES: Message>(&self, request: REQ) -> RES;
 }

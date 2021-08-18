@@ -1,32 +1,31 @@
 use crate::errors::{CodecError, TChannelError};
 use crate::frames::headers::ArgSchemeValue;
 use crate::frames::payloads::ResponseCode;
-use async_trait::async_trait;
 use bytes::Bytes;
+use futures::Future;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::net::SocketAddr;
+use std::pin::Pin;
 
 pub mod raw;
 pub mod thrift;
 
-pub trait Message: Debug + Sized + Send {
+pub trait Message:
+    Debug + Sized + Send + TryFrom<Vec<Bytes>, Error = CodecError> + Into<Vec<Bytes>>
+{
     fn args_scheme() -> ArgSchemeValue;
-    fn to_args(self) -> Vec<Bytes>;
 }
 
-pub trait Request: Message {}
+type Response<RES> = Result<(ResponseCode, RES), TChannelError>;
 
-pub trait Response: Message + TryFrom<Vec<Bytes>, Error = CodecError> {}
-
-#[async_trait]
 pub trait MessageChannel {
-    type REQ: Request;
-    type RES: Response;
+    type REQ: Message;
+    type RES: Message;
 
-    async fn send(
+    fn send(
         &self,
         request: Self::REQ,
         host: SocketAddr,
-    ) -> Result<(ResponseCode, Self::RES), TChannelError>;
+    ) -> Pin<Box<dyn Future<Output = Response<Self::RES>> + Send + '_>>;
 }

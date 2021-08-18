@@ -5,27 +5,27 @@ use crate::frames::payloads::{
     CallArgs, CallContinue, CallResponse, ChecksumType, Codec, Flags, ResponseCode,
 };
 use crate::frames::Type;
-use crate::messages::Response;
+use crate::messages::Message;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
 
 #[derive(Debug, new)]
-pub struct Defragmenter<RES: Response> {
+pub struct Defragmenter<MSG: Message> {
     frame_input: FrameInput,
     #[new(default)]
-    resource_type: PhantomData<RES>,
+    resource_type: PhantomData<MSG>,
 }
 
-impl<RES: Response> Defragmenter<RES> {
-    pub async fn read_response(mut self) -> Result<(ResponseCode, RES), TChannelError> {
+impl<MSG: Message> Defragmenter<MSG> {
+    pub async fn read_response(mut self) -> Result<(ResponseCode, MSG), TChannelError> {
         let mut args_defragmenter = ArgsDefragmenter::default();
         let (code, flags) = self.read_response_begin(&mut args_defragmenter).await?;
         if !flags.contains(Flags::MORE_FRAGMENTS_FOLLOW) {
-            return Ok((code, RES::try_from(args_defragmenter.args())?));
+            return Ok((code, MSG::try_from(args_defragmenter.args())?));
         }
         self.read_response_continue(&mut args_defragmenter).await?;
-        let response = RES::try_from(args_defragmenter.args())?;
+        let response = MSG::try_from(args_defragmenter.args())?;
         Ok((code, response))
     }
 
@@ -90,10 +90,10 @@ impl<RES: Response> Defragmenter<RES> {
     fn verify_headers(&self, headers: &HashMap<String, String>) -> Result<(), TChannelError> {
         if let Some(scheme) = headers.get(TransportHeaderKey::ArgScheme.to_string().as_str()) {
             //TODO ugly
-            if !scheme.eq(RES::args_scheme().to_string().as_str()) {
+            if !scheme.eq(MSG::args_scheme().to_string().as_str()) {
                 return Err(TChannelError::Error(format!(
                     "Expected arg scheme '{}' received '{}'",
-                    RES::args_scheme().to_string(),
+                    MSG::args_scheme().to_string(),
                     scheme
                 )));
             }
@@ -171,7 +171,7 @@ mod tests {
     };
     use crate::frames::{TFrame, TFrameId};
     use crate::messages::raw::RawMessage;
-    use crate::messages::Message;
+    
 
     use tokio_test::*;
 
@@ -210,9 +210,10 @@ mod tests {
         assert_eq!("e".to_string(), *response.endpoint());
         assert_eq!("h".to_string(), *response.header());
         assert_eq!(Bytes::from("b"), *response.body());
+        let response_args: Vec<Bytes> = RawMessage::into(response);
         assert_eq!(
             [Bytes::from("e"), Bytes::from("h"), Bytes::from("b")].to_vec(),
-            response.to_args()
+            response_args
         );
     }
 

@@ -5,7 +5,8 @@ use crate::errors::{ConnectionError, TChannelError};
 use crate::fragmentation::Fragmenter;
 use crate::frames::payloads::ResponseCode;
 use crate::frames::TFrameStream;
-use crate::messages::{Request, Response};
+
+use crate::messages::Message;
 use futures::join;
 use futures::StreamExt;
 use futures::{future, TryStreamExt};
@@ -65,9 +66,8 @@ impl TChannel {
 pub struct SubChannel {
     service_name: String,
     connection_pools: Arc<ConnectionPools>,
-    //TODO handle handlers
-    // #[builder(setter(skip))]
-    // handlers: HashMap<String, Box<RequestHandler>>,
+    // #[new(default)]
+    // handlers: HashMap<String, Box<dyn RequestHandler>>,
 }
 
 impl SubChannel {
@@ -75,7 +75,7 @@ impl SubChannel {
         unimplemented!()
     }
 
-    pub(super) async fn send<REQ: Request, RES: Response>(
+    pub(super) async fn send<REQ: Message, RES: Message>(
         &self,
         request: REQ,
         host: SocketAddr,
@@ -94,14 +94,14 @@ impl SubChannel {
         Ok(connection.new_frame_io().await)
     }
 
-    async fn create_frames<REQ: Request>(
+    async fn create_frames<MSG: Message>(
         &self,
-        request: REQ,
+        request: MSG,
     ) -> Result<TFrameStream, TChannelError> {
         Fragmenter::new(
             self.service_name.clone(),
-            REQ::args_scheme(),
-            request.to_args(),
+            MSG::args_scheme(),
+            request.into(),
         )
         .create_frames()
     }

@@ -1,13 +1,13 @@
 use crate::channel::SubChannel;
-use crate::errors::CodecError;
+use crate::errors::{CodecError};
 use crate::frames::headers::ArgSchemeValue;
-use crate::frames::payloads::ResponseCode;
-use crate::messages::{Message, MessageChannel, Request, Response};
-use async_trait::async_trait;
+use crate::messages::{Message, MessageChannel, Response};
 use bytes::{Buf, Bytes};
+use futures::Future;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::string::FromUtf8Error;
 
 #[derive(Default, Debug, Builder, Getters, MutGetters, new)]
@@ -31,15 +31,7 @@ impl Message for RawMessage {
     fn args_scheme() -> ArgSchemeValue {
         ArgSchemeValue::Raw
     }
-
-    fn to_args(self) -> Vec<Bytes> {
-        Vec::from([self.endpoint.into(), self.header.into(), self.body])
-    }
 }
-
-impl Request for RawMessage {}
-
-impl Response for RawMessage {}
 
 //TODO use it or drop it
 impl TryFrom<Vec<Bytes>> for RawMessage {
@@ -54,6 +46,13 @@ impl TryFrom<Vec<Bytes>> for RawMessage {
     }
 }
 
+#[allow(clippy::from_over_into)]
+impl Into<Vec<Bytes>> for RawMessage {
+    fn into(self) -> Vec<Bytes> {
+        Vec::from([self.endpoint.into(), self.header.into(), self.body])
+    }
+}
+
 fn bytes_to_string(arg: Option<Bytes>) -> Result<String, FromUtf8Error> {
     arg.map_or_else(
         || Ok(String::new()),
@@ -61,16 +60,15 @@ fn bytes_to_string(arg: Option<Bytes>) -> Result<String, FromUtf8Error> {
     )
 }
 
-#[async_trait]
 impl MessageChannel for SubChannel {
     type REQ = RawMessage;
     type RES = RawMessage;
 
-    async fn send(
+    fn send(
         &self,
         request: Self::REQ,
         host: SocketAddr,
-    ) -> Result<(ResponseCode, Self::RES), crate::errors::TChannelError> {
-        self.send(request, host).await
+    ) -> Pin<Box<dyn Future<Output = Response<Self::RES>> + Send + '_>> {
+        Box::pin(self.send(request, host))
     }
 }
