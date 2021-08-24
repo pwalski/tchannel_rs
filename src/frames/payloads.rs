@@ -28,11 +28,11 @@ pub trait Codec: Sized {
 #[derive(Copy, Clone, Debug, PartialEq, FromPrimitive, ToPrimitive)]
 pub enum ChecksumType {
     None = 0x00,
-    // crc-32 (adler-32)
+    /// crc-32 (adler-32)
     Crc32 = 0x01,
-    // Farmhash Fingerprint32
+    /// Farmhash Fingerprint32
     Farmhash = 0x02,
-    // crc-32C
+    /// crc-32C
     Crc32C = 0x03,
 }
 

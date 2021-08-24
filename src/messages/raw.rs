@@ -1,11 +1,12 @@
 use crate::channel::SubChannel;
 use crate::errors::{CodecError};
 use crate::frames::headers::ArgSchemeValue;
-use crate::messages::{Message, MessageChannel, Response};
+use crate::handler::Response;
+use crate::messages::{Message, MessageArgs, MessageChannel};
 use bytes::{Buf, Bytes};
 use futures::Future;
 use std::collections::VecDeque;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::string::FromUtf8Error;
@@ -27,17 +28,17 @@ pub struct RawMessage {
 
 impl RawMessage {}
 
-impl Message for RawMessage {
-    fn args_scheme() -> ArgSchemeValue {
-        ArgSchemeValue::Raw
-    }
-}
-
-//TODO use it or drop it
-impl TryFrom<Vec<Bytes>> for RawMessage {
+impl TryFrom<MessageArgs> for RawMessage {
     type Error = CodecError;
-    fn try_from(args: Vec<Bytes>) -> Result<Self, Self::Error> {
-        let mut deq_args = VecDeque::from(args);
+
+    fn try_from(args: MessageArgs) -> Result<Self, Self::Error> {
+        let mut deq_args = VecDeque::from(args.args);
+        if args.arg_scheme != ArgSchemeValue::Raw {
+            return Err(CodecError::Error(format!(
+                "Wrong arg scheme {:?}",
+                args.arg_scheme
+            )));
+        }
         Ok(RawMessage::new(
             bytes_to_string(deq_args.pop_front())?,
             bytes_to_string(deq_args.pop_front())?,
@@ -46,10 +47,20 @@ impl TryFrom<Vec<Bytes>> for RawMessage {
     }
 }
 
-#[allow(clippy::from_over_into)]
-impl Into<Vec<Bytes>> for RawMessage {
-    fn into(self) -> Vec<Bytes> {
-        Vec::from([self.endpoint.into(), self.header.into(), self.body])
+impl TryInto<MessageArgs> for RawMessage {
+    type Error = CodecError;
+
+    fn try_into(self) -> Result<MessageArgs, Self::Error> {
+        Ok(MessageArgs::new(
+            RawMessage::args_scheme(),
+            Vec::from([self.endpoint.into(), self.header.into(), self.body]),
+        ))
+    }
+}
+
+impl Message for RawMessage {
+    fn args_scheme() -> ArgSchemeValue {
+        ArgSchemeValue::Raw
     }
 }
 

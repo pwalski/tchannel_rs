@@ -1,20 +1,22 @@
-use crate::connection::pool::{ConnectionPools, ConnectionPoolsBuilder};
-use crate::connection::{ConnectionOptions, FrameInput, FrameOutput};
-use crate::defragmentation::Defragmenter;
-use crate::errors::{ConnectionError, TChannelError};
-use crate::fragmentation::Fragmenter;
-use crate::frames::payloads::ResponseCode;
-use crate::frames::TFrameStream;
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::sync::Arc;
 
-use crate::messages::Message;
 use futures::join;
 use futures::StreamExt;
 use futures::{future, TryStreamExt};
 use log::{debug, error};
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
 use tokio::sync::RwLock;
+
+use crate::connection::pool::{ConnectionPools, ConnectionPoolsBuilder};
+use crate::connection::{ConnectionOptions, FrameInput, FrameOutput};
+use crate::defragmentation::Defragmenter;
+use crate::errors::{ConnectionError, HandlerError, TChannelError};
+use crate::fragmentation::Fragmenter;
+use crate::frames::payloads::ResponseCode;
+use crate::frames::TFrameStream;
+use crate::handler::{MessageArgsHandler, RequestHandler, RequestHandlerAdapter};
+use crate::messages::{Message, MessageArgs};
 
 pub struct TChannel {
     subchannels: RwLock<HashMap<String, Arc<SubChannel>>>,
@@ -66,13 +68,33 @@ impl TChannel {
 pub struct SubChannel {
     service_name: String,
     connection_pools: Arc<ConnectionPools>,
-    // #[new(default)]
-    // handlers: HashMap<String, Box<dyn RequestHandler>>,
+    #[new(default)]
+    handlers: HashMap<String, Box<dyn MessageArgsHandler>>,
 }
 
 impl SubChannel {
-    pub fn register<HANDLER>(&mut self, _handler_name: &str, _handler: HANDLER) -> &Self {
-        unimplemented!()
+    pub fn register<S, REQ, RES, HANDLER>(
+        &mut self,
+        endpoint: S,
+        request_handler: HANDLER,
+    ) -> Result<(), TChannelError>
+    where
+        S: AsRef<str>,
+        REQ: Message + 'static,
+        RES: Message + 'static,
+        HANDLER: RequestHandler<REQ = REQ, RES = RES> + 'static,
+    {
+        let handler_adapter = RequestHandlerAdapter::new(request_handler);
+        Ok(self
+            .handlers
+            .try_insert(endpoint.as_ref().to_string(), Box::new(handler_adapter))
+            .map_err(|err| {
+                HandlerError::RegistrationError(format!(
+                    "Handler already registered for '{}'",
+                    err.entry.key()
+                ))
+            })
+            .map(|_| ())?)
     }
 
     pub(super) async fn send<REQ: Message, RES: Message>(
@@ -80,10 +102,11 @@ impl SubChannel {
         request: REQ,
         host: SocketAddr,
     ) -> Result<(ResponseCode, RES), crate::errors::TChannelError> {
-        let (connection_res, frames_res) = join!(self.connect(host), self.create_frames(request));
+        let (connection_res, frames_res) =
+            join!(self.connect(host), self.create_frames(request.try_into()?));
         let (frames_out, frames_in) = connection_res?;
         send_frames(frames_res?, &frames_out).await?;
-        let response = Defragmenter::new(frames_in).read_response().await;
+        let response = Defragmenter::new(frames_in).create_response().await;
         frames_out.close().await; //TODO ugly
         response
     }
@@ -94,16 +117,8 @@ impl SubChannel {
         Ok(connection.new_frame_io().await)
     }
 
-    async fn create_frames<MSG: Message>(
-        &self,
-        request: MSG,
-    ) -> Result<TFrameStream, TChannelError> {
-        Fragmenter::new(
-            self.service_name.clone(),
-            MSG::args_scheme(),
-            request.into(),
-        )
-        .create_frames()
+    async fn create_frames(&self, request: MessageArgs) -> Result<TFrameStream, TChannelError> {
+        Fragmenter::new(self.service_name.clone(), request.arg_scheme, request.args).create_frames()
     }
 }
 

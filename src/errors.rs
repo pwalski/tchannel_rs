@@ -19,8 +19,12 @@ pub enum TChannelError {
 
     #[error(transparent)]
     ConnectionPoolError(#[from] RunError<ConnectionError>),
+
+    #[error(transparent)]
+    HandlerError(#[from] HandlerError),
 }
 
+/// Frame encoding error.
 #[derive(Error, Debug, PartialEq)]
 pub enum CodecError {
     #[error("Codec error: {0}")]
@@ -37,6 +41,7 @@ pub enum CodecError {
     StringDecodingError(#[from] FromUtf8Error),
 }
 
+/// Host connection error.
 #[derive(Error, Debug, PartialEq)]
 pub enum ConnectionError {
     /// Represents general error.
@@ -59,6 +64,17 @@ pub enum ConnectionError {
 
     #[error("Unexpected response: {0:?}")]
     UnexpectedResponseError(Type),
+}
+
+/// Request handler Error
+#[derive(Error, Debug, PartialEq)]
+pub enum HandlerError {
+    /// Represents general error.
+    #[error("Handler error: {0}")]
+    Error(String),
+
+    #[error("Handler registration error: {0}")]
+    RegistrationError(String),
 }
 
 #[derive(Error, Debug)]

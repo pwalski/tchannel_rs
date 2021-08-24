@@ -5,7 +5,7 @@ use crate::frames::payloads::{
     CallArgs, CallContinue, CallResponse, ChecksumType, Codec, Flags, ResponseCode,
 };
 use crate::frames::Type;
-use crate::messages::Message;
+use crate::messages::{Message, MessageArgs};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
@@ -18,15 +18,20 @@ pub struct Defragmenter<MSG: Message> {
 }
 
 impl<MSG: Message> Defragmenter<MSG> {
-    pub async fn read_response(mut self) -> Result<(ResponseCode, MSG), TChannelError> {
+    pub async fn create_response(self) -> Result<(ResponseCode, MSG), TChannelError> {
+        let (code, args) = self.read_response().await?;
+        let msg_args = MessageArgs::new(MSG::args_scheme(), args);
+        Ok((code, MSG::try_from(msg_args)?))
+    }
+
+    async fn read_response(mut self) -> Result<(ResponseCode, Vec<Bytes>), TChannelError> {
         let mut args_defragmenter = ArgsDefragmenter::default();
         let (code, flags) = self.read_response_begin(&mut args_defragmenter).await?;
         if !flags.contains(Flags::MORE_FRAGMENTS_FOLLOW) {
-            return Ok((code, MSG::try_from(args_defragmenter.args())?));
+            return Ok((code, args_defragmenter.args()));
         }
         self.read_response_continue(&mut args_defragmenter).await?;
-        let response = MSG::try_from(args_defragmenter.args())?;
-        Ok((code, response))
+        Ok((code, args_defragmenter.args()))
     }
 
     async fn read_response_begin(
@@ -171,7 +176,7 @@ mod tests {
     };
     use crate::frames::{TFrame, TFrameId};
     use crate::messages::raw::RawMessage;
-    
+    use std::convert::TryInto;
 
     use tokio_test::*;
 
@@ -201,7 +206,7 @@ mod tests {
         // When
         let defragmenter = Defragmenter::new(receiver);
         let response_res: Result<(ResponseCode, RawMessage), TChannelError> =
-            block_on(defragmenter.read_response());
+            block_on(defragmenter.create_response());
 
         // Then
         // assert_ok!(&response_res);
@@ -210,10 +215,11 @@ mod tests {
         assert_eq!("e".to_string(), *response.endpoint());
         assert_eq!("h".to_string(), *response.header());
         assert_eq!(Bytes::from("b"), *response.body());
-        let response_args: Vec<Bytes> = RawMessage::into(response);
+        let response_args: MessageArgs = response.try_into().unwrap();
+        assert_eq!(ARG_SCHEME, response_args.arg_scheme);
         assert_eq!(
             [Bytes::from("e"), Bytes::from("h"), Bytes::from("b")].to_vec(),
-            response_args
+            response_args.args
         );
     }
 
@@ -237,7 +243,7 @@ mod tests {
         // When
         let defragmenter = Defragmenter::new(receiver);
         let response_res: Result<(ResponseCode, RawMessage), TChannelError> =
-            block_on(defragmenter.read_response());
+            block_on(defragmenter.create_response());
 
         // Then
         assert!(response_res.is_err());

@@ -1,9 +1,12 @@
 use crate::errors::{CodecError, TChannelError};
 use crate::frames::headers::ArgSchemeValue;
 use crate::frames::payloads::ResponseCode;
+use crate::handler::{Response};
+
+
 use bytes::Bytes;
 use futures::Future;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::pin::Pin;
@@ -12,12 +15,14 @@ pub mod raw;
 pub mod thrift;
 
 pub trait Message:
-    Debug + Sized + Send + TryFrom<Vec<Bytes>, Error = CodecError> + Into<Vec<Bytes>>
+    Debug
+    + Sized
+    + Send
+    + TryFrom<MessageArgs, Error = CodecError>
+    + TryInto<MessageArgs, Error = CodecError>
 {
     fn args_scheme() -> ArgSchemeValue;
 }
-
-type Response<RES> = Result<(ResponseCode, RES), TChannelError>;
 
 pub trait MessageChannel {
     type REQ: Message;
@@ -29,3 +34,11 @@ pub trait MessageChannel {
         host: SocketAddr,
     ) -> Pin<Box<dyn Future<Output = Response<Self::RES>> + Send + '_>>;
 }
+
+#[derive(Debug, new)]
+pub struct MessageArgs {
+    pub arg_scheme: ArgSchemeValue,
+    pub args: Vec<Bytes>,
+}
+
+pub(crate) type MessageArgsResponse = Result<(ResponseCode, MessageArgs), TChannelError>;
