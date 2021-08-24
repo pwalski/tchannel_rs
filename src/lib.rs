@@ -46,7 +46,6 @@
 //! });
 //! ```
 //!
-#![feature(map_try_insert)]
 
 #[macro_use]
 extern crate getset;

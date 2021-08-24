@@ -1,7 +1,6 @@
-use crate::errors::{CodecError};
+use crate::errors::CodecError;
 use crate::frames::headers::ArgSchemeValue;
 use crate::messages::{Message, MessageArgs};
-
 use std::convert::{TryFrom, TryInto};
 
 #[derive(Default, Debug)]

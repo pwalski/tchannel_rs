@@ -69,15 +69,15 @@ pub struct SubChannel {
     service_name: String,
     connection_pools: Arc<ConnectionPools>,
     #[new(default)]
-    handlers: HashMap<String, Box<dyn MessageArgsHandler>>,
+    handlers: RwLock<HashMap<String, Box<dyn MessageArgsHandler>>>,
 }
 
 impl SubChannel {
-    pub fn register<S, REQ, RES, HANDLER>(
+    pub async fn register<S, REQ, RES, HANDLER>(
         &mut self,
         endpoint: S,
         request_handler: HANDLER,
-    ) -> Result<(), TChannelError>
+    ) -> Result<(), HandlerError>
     where
         S: AsRef<str>,
         REQ: Message + 'static,
@@ -85,16 +85,26 @@ impl SubChannel {
         HANDLER: RequestHandler<REQ = REQ, RES = RES> + 'static,
     {
         let handler_adapter = RequestHandlerAdapter::new(request_handler);
-        Ok(self
-            .handlers
-            .try_insert(endpoint.as_ref().to_string(), Box::new(handler_adapter))
-            .map_err(|err| {
-                HandlerError::RegistrationError(format!(
-                    "Handler already registered for '{}'",
-                    err.entry.key()
-                ))
-            })
-            .map(|_| ())?)
+        let mut handlers = self.handlers.write().await;
+        if handlers.contains_key(endpoint.as_ref()) {
+            return Err(HandlerError::RegistrationError(format!(
+                "Handler already registered for '{}'",
+                endpoint.as_ref()
+            )));
+        }
+        handlers.insert(endpoint.as_ref().to_string(), Box::new(handler_adapter));
+        Ok(()) //TODO return &mut of nested handler?
+    }
+
+    pub async fn unregister<S: AsRef<str>>(&mut self, endpoint: S) -> Result<(), HandlerError> {
+        let mut handlers = self.handlers.write().await;
+        match handlers.remove(endpoint.as_ref()) {
+            Some(_) => Ok(()),
+            None => Err(HandlerError::RegistrationError(format!(
+                "Handler '{}' is missing.",
+                endpoint.as_ref()
+            ))),
+        }
     }
 
     pub(super) async fn send<REQ: Message, RES: Message>(

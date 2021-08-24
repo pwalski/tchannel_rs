@@ -1,9 +1,7 @@
 use crate::errors::{CodecError, TChannelError};
 use crate::frames::headers::ArgSchemeValue;
 use crate::frames::payloads::ResponseCode;
-use crate::handler::{Response};
-
-
+use crate::handler::Response;
 use bytes::Bytes;
 use futures::Future;
 use std::convert::{TryFrom, TryInto};

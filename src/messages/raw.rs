@@ -1,5 +1,5 @@
 use crate::channel::SubChannel;
-use crate::errors::{CodecError};
+use crate::errors::CodecError;
 use crate::frames::headers::ArgSchemeValue;
 use crate::handler::Response;
 use crate::messages::{Message, MessageArgs, MessageChannel};
