@@ -1,13 +1,3 @@
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
-
-use futures::join;
-use futures::StreamExt;
-use futures::{future, TryStreamExt};
-use log::{debug, error};
-use tokio::sync::RwLock;
-
 use crate::connection::pool::{ConnectionPools, ConnectionPoolsBuilder};
 use crate::connection::{ConnectionOptions, FrameInput, FrameOutput};
 use crate::defragmentation::Defragmenter;
@@ -15,8 +5,19 @@ use crate::errors::{ConnectionError, HandlerError, TChannelError};
 use crate::fragmentation::Fragmenter;
 use crate::frames::payloads::ResponseCode;
 use crate::frames::TFrameStream;
-use crate::handler::{MessageArgsHandler, RequestHandler, RequestHandlerAdapter};
+use crate::handler::{
+    MessageArgsHandler, RequestHandler, RequestHandlerAdapter, RequestHandlerAsync,
+    RequestHandlerAsyncAdapter,
+};
 use crate::messages::{Message, MessageArgs};
+use futures::join;
+use futures::StreamExt;
+use futures::{future, TryStreamExt};
+use log::{debug, error};
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 pub struct TChannel {
     subchannels: RwLock<HashMap<String, Arc<SubChannel>>>,
@@ -73,18 +74,43 @@ pub struct SubChannel {
 }
 
 impl SubChannel {
-    pub async fn register<S, REQ, RES, HANDLER>(
+    /// Register request handler.
+    pub async fn register<S: AsRef<str>, REQ, RES, HANDLER>(
         &mut self,
         endpoint: S,
         request_handler: HANDLER,
     ) -> Result<(), HandlerError>
     where
-        S: AsRef<str>,
         REQ: Message + 'static,
         RES: Message + 'static,
         HANDLER: RequestHandler<REQ = REQ, RES = RES> + 'static,
     {
         let handler_adapter = RequestHandlerAdapter::new(request_handler);
+        self.register_handler(endpoint, Box::new(handler_adapter))
+            .await
+    }
+
+    /// Register async request handler.
+    pub async fn register_async<S: AsRef<str>, REQ, RES, HANDLER>(
+        &mut self,
+        endpoint: S,
+        request_handler: HANDLER,
+    ) -> Result<(), HandlerError>
+    where
+        REQ: Message + 'static,
+        RES: Message + 'static,
+        HANDLER: RequestHandlerAsync<REQ = REQ, RES = RES> + 'static,
+    {
+        let handler_adapter = RequestHandlerAsyncAdapter::new(request_handler);
+        self.register_handler(endpoint, Box::new(handler_adapter))
+            .await
+    }
+
+    async fn register_handler<S: AsRef<str>>(
+        &mut self,
+        endpoint: S,
+        request_handler: Box<dyn MessageArgsHandler>,
+    ) -> Result<(), HandlerError> {
         let mut handlers = self.handlers.write().await;
         if handlers.contains_key(endpoint.as_ref()) {
             return Err(HandlerError::RegistrationError(format!(
@@ -92,10 +118,11 @@ impl SubChannel {
                 endpoint.as_ref()
             )));
         }
-        handlers.insert(endpoint.as_ref().to_string(), Box::new(handler_adapter));
+        handlers.insert(endpoint.as_ref().to_string(), request_handler);
         Ok(()) //TODO return &mut of nested handler?
     }
 
+    /// Unregister request handler.
     pub async fn unregister<S: AsRef<str>>(&mut self, endpoint: S) -> Result<(), HandlerError> {
         let mut handlers = self.handlers.write().await;
         match handlers.remove(endpoint.as_ref()) {

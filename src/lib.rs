@@ -70,9 +70,9 @@ pub(crate) mod connection;
 pub(crate) mod defragmentation;
 pub(crate) mod fragmentation;
 pub(crate) mod frames;
-pub(crate) mod handler;
 
 pub mod errors;
+pub mod handler;
 pub mod messages;
 
 pub use self::channel::SubChannel;

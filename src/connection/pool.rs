@@ -26,7 +26,6 @@ pub struct ConnectionPools {
 }
 
 impl ConnectionPools {
-    //TODO do not like name
     pub async fn get(
         &self,
         addr: SocketAddr,
