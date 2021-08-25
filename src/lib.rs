@@ -70,12 +70,13 @@ pub(crate) mod connection;
 pub(crate) mod defragmentation;
 pub(crate) mod fragmentation;
 pub(crate) mod frames;
+pub(crate) mod subchannel;
 
 pub mod errors;
 pub mod handler;
 pub mod messages;
 
-pub use self::channel::SubChannel;
 pub use self::channel::TChannel;
 pub use self::connection::ConnectionOptions;
 pub use self::connection::ConnectionOptionsBuilder;
+pub use self::subchannel::SubChannel;

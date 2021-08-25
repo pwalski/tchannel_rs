@@ -1,8 +1,8 @@
-use crate::channel::SubChannel;
 use crate::errors::CodecError;
 use crate::frames::headers::ArgSchemeValue;
 use crate::handler::Response;
 use crate::messages::{Message, MessageArgs, MessageChannel};
+use crate::subchannel::SubChannel;
 use bytes::{Buf, Bytes};
 use futures::Future;
 use std::collections::VecDeque;
