@@ -31,13 +31,13 @@
 //! use std::str::FromStr;
 //! use tchannel_protocol::messages::raw::RawMessage;
 //! use tchannel_protocol::messages::MessageChannel;
-//! use tchannel_protocol::{TChannel,ConnectionOptions};
+//! use tchannel_protocol::{TChannel,Config};
 //! use tokio::runtime::Runtime;
 //!
 //! Runtime::new().unwrap().spawn(async {
 //!     let request = RawMessage::new("endpoint_name".into(), "header".into(), "payload".into());
 //!     let host = SocketAddr::from_str("host_address:port").unwrap();
-//!     let mut tchannel = TChannel::new(ConnectionOptions::default()).unwrap();
+//!     let mut tchannel = TChannel::new(Config::default()).unwrap();
 //!     let subchannel = tchannel.subchannel("server".to_owned()).await.unwrap();
 //!     match subchannel.send(request, host).await {
 //!         Ok(response) => println!("Response: {:?}", response),
@@ -77,6 +77,5 @@ pub mod handler;
 pub mod messages;
 
 pub use self::channel::TChannel;
-pub use self::connection::ConnectionOptions;
-pub use self::connection::ConnectionOptionsBuilder;
+pub use self::connection::Config;
 pub use self::subchannel::SubChannel;

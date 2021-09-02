@@ -1,4 +1,4 @@
-use crate::connection::{Connection, ConnectionOptions};
+use crate::connection::{Config, Connection};
 use crate::errors::ConnectionError;
 use crate::errors::ConnectionError::{MessageError, UnexpectedResponseError};
 use crate::frames::payloads::ErrorMsg;
@@ -18,7 +18,7 @@ use tokio::sync::RwLock;
 #[derive(Debug, Default, Builder)]
 #[builder(pattern = "owned")]
 pub struct ConnectionPools {
-    connection_options: ConnectionOptions,
+    config: Arc<Config>,
     #[builder(setter(skip))]
     pools: RwLock<HashMap<SocketAddr, Arc<Pool<ConnectionManager>>>>,
     #[builder(setter(skip))]
@@ -46,13 +46,13 @@ impl ConnectionPools {
         }
         let pool = Arc::new(
             Pool::builder()
-                .max_lifetime(self.connection_options.lifetime)
-                .max_size(self.connection_options.max_connections)
-                .test_on_check_out(self.connection_options.test_connection)
+                .max_lifetime(self.config.lifetime)
+                .max_size(self.config.max_connections)
+                .test_on_check_out(self.config.test_connection)
                 .error_sink(self.connection_pools_logger.boxed_clone())
                 .build(ConnectionManager {
                     addr,
-                    frame_buffer_size: self.connection_options.frame_buffer_size,
+                    frame_buffer_size: self.config.frame_buffer_size,
                 })
                 .await?,
         );

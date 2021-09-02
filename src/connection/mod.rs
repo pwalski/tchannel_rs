@@ -9,7 +9,7 @@ use futures::{future, StreamExt};
 use log::{debug, error};
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
@@ -22,21 +22,25 @@ use tokio::task::JoinHandle;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::codec::{FramedRead, FramedWrite};
 
-#[derive(Debug, Builder, Clone)]
-pub struct ConnectionOptions {
-    max_connections: u32,
-    lifetime: Option<Duration>,
-    test_connection: bool,
-    frame_buffer_size: usize,
+#[derive(Debug, Builder)]
+pub struct Config {
+    pub(crate) max_connections: u32,
+    pub(crate) lifetime: Option<Duration>,
+    pub(crate) test_connection: bool,
+    pub(crate) frame_buffer_size: usize,
+    pub(crate) server_address: SocketAddr,
+    pub(crate) max_server_threads: usize,
 }
 
-impl Default for ConnectionOptions {
+impl Default for Config {
     fn default() -> Self {
-        ConnectionOptions {
+        Config {
             max_connections: 1,
             lifetime: Some(Duration::from_secs(60)),
             test_connection: false,
             frame_buffer_size: 100,
+            server_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8888),
+            max_server_threads: 1,
         }
     }
 }
