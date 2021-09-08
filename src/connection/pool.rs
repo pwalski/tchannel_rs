@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::net::TcpStream;
 use tokio::sync::RwLock;
 
 #[derive(Debug, Default, Builder)]
@@ -84,11 +85,14 @@ pub struct ConnectionManager {
 
 #[async_trait]
 impl bb8::ManageConnection for ConnectionManager {
+    //TODO create in out connection types?
     type Connection = Connection;
     type Error = ConnectionError;
 
     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
-        let connection = Connection::connect(self.addr, self.frame_buffer_size).await?;
+        debug!("Connecting to {}", self.addr);
+        let stream = TcpStream::connect(self.addr).await?;
+        let connection = Connection::connect(stream, self.frame_buffer_size).await?;
         verify(connection).await
     }
 
@@ -128,6 +132,7 @@ async fn verify(connection: Connection) -> Result<Connection, ConnectionError> {
 
 async fn init_handshake(connection: &Connection) -> Result<TFrameId, ConnectionError> {
     let mut bytes = BytesMut::new();
+    //TODO add proper `crate::frames::headers::InitHeaderKey` headers
     let init = Init::default();
     init.encode(&mut bytes)?;
     let init_frame = TFrame::new(Type::InitRequest, bytes.freeze());

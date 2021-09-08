@@ -70,6 +70,7 @@ pub(crate) mod connection;
 pub(crate) mod defragmentation;
 pub(crate) mod fragmentation;
 pub(crate) mod frames;
+pub(crate) mod server;
 pub(crate) mod subchannel;
 
 pub mod errors;

@@ -21,7 +21,7 @@ mvn -f examples-server package exec:exec -Pserver
 
 Basic client scenario:
 ```shell
-RUST_LOG=DEBUG cargo run --example basic
+RUST_LOG=DEBUG cargo run --example client
 ```
 
 ---

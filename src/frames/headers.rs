@@ -63,3 +63,22 @@ pub enum RetryFlagValue {
     #[strum(serialize = "t")]
     RetryOnTimeout,
 }
+
+#[derive(ToString, Debug, EnumString, PartialEq, Eq)]
+pub enum InitHeaderKey {
+    #[allow(dead_code)]
+    #[strum(serialize = "host_port")]
+    HostPort,
+    #[allow(dead_code)]
+    #[strum(serialize = "process_name")]
+    ProcessName,
+    #[allow(dead_code)]
+    #[strum(serialize = "tchannel_language")]
+    TChannelLanguage,
+    #[allow(dead_code)]
+    #[strum(serialize = "tchannel_language_version")]
+    TChannelLanguageVersion,
+    #[allow(dead_code)]
+    #[strum(serialize = "tchannel_version")]
+    TChannelVersion,
+}

@@ -1,6 +1,6 @@
 pub mod pool;
 
-use crate::errors::ConnectionError;
+use crate::errors::{CodecError, ConnectionError};
 use crate::frames::{TFrame, TFrameId, TFrameIdCodec};
 use core::time::Duration;
 use futures::prelude::*;
@@ -45,54 +45,91 @@ impl Default for Config {
     }
 }
 
-#[derive(Default, Debug)]
-pub struct PendingIds {
-    channels: RwLock<HashMap<u32, Sender<TFrameId>>>,
+/// Pending Message Ids mapped to Senders of frames for given message Id.
+#[derive(Debug, Default, new)]
+pub struct FrameSenders {
+    #[new(default)]
+    senders: RwLock<HashMap<u32, Sender<TFrameId>>>,
+    buffer_size: usize,
 }
 
-impl PendingIds {
-    pub async fn add(&self, id: u32, sender: Sender<TFrameId>) {
-        let mut channels = self.channels.write().await;
-        channels.insert(id, sender);
-    }
-
-    pub async fn respond(&self, response: TFrameId) -> Result<(), ConnectionError> {
-        let id = *response.id();
-        let channels = self.channels.read().await;
-        if let Some(sender) = channels.get(&id) {
-            return Ok(sender.send(response).await?);
+impl FrameSenders {
+    pub async fn send(
+        &self,
+        frame: TFrameId,
+    ) -> Result<Option<Receiver<TFrameId>>, ConnectionError> {
+        let senders = self.senders.read().await;
+        if let Some(sender) = senders.get(frame.id()) {
+            return Ok(sender.send(frame).map_ok(|_| None).await?);
         }
-        Err(ConnectionError::Error(format!("Id {} not found", id)))
+        std::mem::drop(senders);
+        //TODO it will return error on check if it got concurrently inserted
+        Ok(self.send_first(frame).map_ok(Some).await?)
     }
 
     pub async fn remove(&self, id: &u32) -> Option<Sender<TFrameId>> {
-        let mut channels = self.channels.write().await;
+        let mut channels = self.senders.write().await;
         channels.remove(id)
+    }
+
+    //TODO cleanup methods below
+
+    pub async fn add(&self, id: u32, sender: Sender<TFrameId>) {
+        let mut channels = self.senders.write().await;
+        channels.insert(id, sender);
+    }
+
+    pub async fn send_first(&self, frame: TFrameId) -> Result<Receiver<TFrameId>, ConnectionError> {
+        let id = frame.id();
+        debug!("Received frame with id: {}", id);
+        let mut senders = self.senders.write().await;
+        if let Some(_sender) = senders.get(id) {
+            let msg = format!("Sender for id {} exists", id);
+            return Err(ConnectionError::Error(msg));
+        }
+        let (sender, receiver) = mpsc::channel::<TFrameId>(self.buffer_size);
+        senders.insert(*id, sender);
+        Ok(receiver)
+    }
+
+    pub async fn send_following(&self, frame: TFrameId) -> Result<(), ConnectionError> {
+        let id = *frame.id();
+        debug!("Received frame with id: {}", id);
+        let senders = self.senders.read().await;
+        if let Some(sender) = senders.get(&id) {
+            return Ok(sender.send(frame).await?);
+        }
+        Err(ConnectionError::Error(format!("Id {} not found", id)))
     }
 }
 
-#[derive(Debug, Builder)]
-#[builder(pattern = "owned")]
+#[derive(Debug)]
 pub struct Connection {
-    #[builder(setter(skip))]
     next_message_id: AtomicU32,
-    #[builder(setter(skip))]
-    pending_ids: Arc<PendingIds>,
-    sender: tokio::sync::mpsc::Sender<TFrameId>,
+    pending_ids: Arc<FrameSenders>,
+    sender: Sender<TFrameId>,
+    buffer_size: usize,
 }
 
 impl Connection {
+    pub fn new(sender: Sender<TFrameId>, buffer_size: usize) -> Connection {
+        Connection {
+            next_message_id: AtomicU32::default(),
+            pending_ids: Arc::new(FrameSenders::new(buffer_size)),
+            sender,
+            buffer_size,
+        }
+    }
+
     pub async fn connect(
-        addr: SocketAddr,
+        stream: TcpStream,
         buffer_size: usize,
     ) -> Result<Connection, ConnectionError> {
-        debug!("Connecting to {}", addr);
-        let tcp_stream = TcpStream::connect(addr).await?;
-        let (read, write) = tcp_stream.into_split();
+        let (read, write) = stream.into_split();
         let framed_read = FramedRead::new(read, TFrameIdCodec {});
         let framed_write = FramedWrite::new(write, TFrameIdCodec {});
         let (sender, receiver) = mpsc::channel::<TFrameId>(buffer_size);
-        let connection = ConnectionBuilder::default().sender(sender).build()?;
+        let connection = Connection::new(sender, buffer_size);
         FrameReceiver::spawn(framed_read, connection.pending_ids.clone());
         FrameSender::spawn(framed_write, receiver, buffer_size);
         Ok(connection)
@@ -100,22 +137,22 @@ impl Connection {
 
     /// Prepares frame I/O with new message id. Then sends `frame` and awaits for response.
     pub async fn send_one(&self, frame: TFrame) -> Result<TFrameId, ConnectionError> {
-        let (frame_output, mut frame_receiver) = self.new_frame_io().await;
+        let (mut frame_input, frame_output) = self.new_frames_io().await;
         frame_output.send(frame).await?;
-        let response = frame_receiver.recv().await;
+        let response = frame_input.recv().await;
         frame_output.close().await;
         response.ok_or_else(|| ConnectionError::Error("Received no response".to_owned()))
     }
 
     /// Prepares frame I/O with new message id.
     /// Then returns both input and output which allows to send multiple frames with same message id.
-    pub async fn new_frame_io(&self) -> (FrameOutput, FrameInput) {
+    pub async fn new_frames_io(&self) -> (FrameInput, FrameOutput) {
         let message_id = self.next_message_id();
-        let (sender, receiver) = mpsc::channel::<TFrameId>(10); //TODO connfigure
+        let (sender, receiver) = mpsc::channel::<TFrameId>(10); //TODO configure
         self.pending_ids.add(message_id, sender).await;
         let frame_output =
             FrameOutput::new(message_id, self.sender.clone(), self.pending_ids.clone());
-        (frame_output, receiver)
+        (receiver, frame_output)
     }
 
     fn next_message_id(&self) -> u32 {
@@ -129,7 +166,7 @@ pub type FrameInput = Receiver<TFrameId>;
 pub struct FrameOutput {
     message_id: u32,
     sender: Sender<TFrameId>,
-    pending_ids: Arc<PendingIds>,
+    pending_ids: Arc<FrameSenders>,
 }
 
 impl FrameOutput {
@@ -139,7 +176,7 @@ impl FrameOutput {
         Ok(self.sender.send(frame).await?)
     }
 
-    //TODO figure out how to automatically close it? impl Sink? do it on Deref?
+    //TODO figure out how to automatically close it? impl Sink? do it on Drop (which is not async)?
     pub async fn close(&self) {
         self.pending_ids.remove(&self.message_id).await;
     }
@@ -192,15 +229,15 @@ impl FrameSender {
 }
 
 struct FrameReceiver {
-    pending_ids: Arc<PendingIds>,
+    frame_senders: Arc<FrameSenders>,
 }
 
 impl FrameReceiver {
     pub fn spawn(
         framed_read: FramedRead<OwnedReadHalf, TFrameIdCodec>,
-        pending_ids: Arc<PendingIds>,
+        frame_senders: Arc<FrameSenders>,
     ) -> JoinHandle<()> {
-        let frame_receiver = FrameReceiver { pending_ids };
+        let frame_receiver = FrameReceiver { frame_senders };
         tokio::spawn(async move {
             frame_receiver
                 .run(framed_read)
@@ -209,25 +246,30 @@ impl FrameReceiver {
         })
     }
 
-    async fn run(&self, frame_input: FramedRead<OwnedReadHalf, TFrameIdCodec>) {
+    async fn run(&self, framed_read: FramedRead<OwnedReadHalf, TFrameIdCodec>) {
         debug!("Starting FrameReceiver");
-        frame_input
-            .filter_map(|frame_res| match frame_res {
-                Ok(frame) => future::ready(Some(frame)),
-                Err(err) => {
-                    error!("Failed to serialize frame: {:?}", err);
-                    future::ready(None)
-                }
-            })
-            .map(|frame| {
-                debug!("Received frame id: {}", frame.id());
-                self.pending_ids.respond(frame)
-            })
-            .for_each(|res| async {
-                if let Some(err) = res.await.err() {
-                    error!("Failed to send frame: {:?}", err);
-                }
-            })
+        framed_read
+            .filter_map(Self::print_if_err_and_skip)
+            .map(|frame| self.frame_senders.send_following(frame))
+            .for_each(Self::print_if_err)
             .await
+    }
+
+    fn print_if_err_and_skip(
+        frame_res: Result<TFrameId, CodecError>,
+    ) -> impl Future<Output = Option<TFrameId>> {
+        match frame_res {
+            Ok(frame) => future::ready(Some(frame)),
+            Err(err) => {
+                error!("Frame handling failure: {:?}", err);
+                future::ready(None)
+            }
+        }
+    }
+
+    async fn print_if_err(some_res: impl Future<Output = Result<(), ConnectionError>>) {
+        if let Some(err) = some_res.await.err() {
+            error!("Failed to send frame: {:?}", err);
+        }
     }
 }

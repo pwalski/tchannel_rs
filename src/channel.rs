@@ -1,17 +1,17 @@
 use crate::connection::pool::{ConnectionPools, ConnectionPoolsBuilder};
 use crate::connection::Config;
 use crate::errors::{ConnectionError, TChannelError};
+use crate::server::Server;
 use crate::SubChannel;
 use log::debug;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::net::{TcpListener, TcpStream};
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 
-type SharedSubChannels = Arc<RwLock<HashMap<String, Arc<SubChannel>>>>;
+pub(crate) type SharedSubChannels = Arc<RwLock<HashMap<String, Arc<SubChannel>>>>;
 // Mutex to be Sync, Cell to get owned type on Drop impl TChannel, Option for lazy initialization.
 type OptionalRuntime = Mutex<Cell<Option<Runtime>>>;
 
@@ -38,15 +38,17 @@ impl TChannel {
         })
     }
 
+    /// Starts server
     pub fn start_server(&mut self) -> Result<(), ConnectionError> {
         let mut runtime_lock = self.server_runtime.lock().unwrap();
-        if runtime_lock.get_mut().is_some() {
+        if runtime_lock.get_mut().is_none() {
             debug!("Server runtime is alive"); //TODO lie
             let runtime = tokio::runtime::Builder::new_multi_thread()
+                .enable_io()
                 .max_blocking_threads(self.config.max_server_threads)
                 .thread_name("tchannel_server")
                 .build()?;
-            runtime.spawn(Server::start(self.config.clone(), self.subchannels.clone()));
+            runtime.spawn(Server::run(self.config.clone(), self.subchannels.clone()));
             runtime_lock.set(Some(runtime));
         }
         Ok(())
@@ -98,29 +100,5 @@ impl TChannel {
 impl Drop for TChannel {
     fn drop(&mut self) {
         self.shutdown_server();
-    }
-}
-
-#[derive(Debug)]
-struct Server {
-    subchannels: SharedSubChannels,
-}
-
-impl Server {
-    async fn start(
-        config: Arc<Config>,
-        subchannels: SharedSubChannels,
-    ) -> Result<(), ConnectionError> {
-        debug!("Starting server on {}", config.server_address);
-        let listener = TcpListener::bind(config.server_address).await?;
-        let mut server = Server { subchannels };
-        loop {
-            let (stream, _addr) = listener.accept().await?;
-            server.handle(stream).await?;
-        }
-    }
-
-    async fn handle(&mut self, _stream: TcpStream) -> Result<(), ConnectionError> {
-        todo!()
     }
 }

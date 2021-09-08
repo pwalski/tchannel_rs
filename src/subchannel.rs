@@ -95,17 +95,17 @@ impl SubChannel {
     ) -> Result<(ResponseCode, RES), crate::errors::TChannelError> {
         let (connection_res, frames_res) =
             join!(self.connect(host), self.create_frames(request.try_into()?));
-        let (frames_out, frames_in) = connection_res?;
+        let (frames_in, frames_out) = connection_res?;
         send_frames(frames_res?, &frames_out).await?;
         let response = Defragmenter::new(frames_in).create_response().await;
         frames_out.close().await; //TODO ugly
         response
     }
 
-    async fn connect(&self, host: SocketAddr) -> Result<(FrameOutput, FrameInput), TChannelError> {
+    async fn connect(&self, host: SocketAddr) -> Result<(FrameInput, FrameOutput), TChannelError> {
         let pool = self.connection_pools.get(host).await?;
         let connection = pool.get().await?;
-        Ok(connection.new_frame_io().await)
+        Ok(connection.new_frames_io().await)
     }
 
     async fn create_frames(&self, request: MessageArgs) -> Result<TFrameStream, TChannelError> {
