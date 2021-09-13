@@ -1,6 +1,7 @@
 use crate::channel::SharedSubChannels;
-use crate::connection::{Config, FrameSenders};
-use crate::errors::ConnectionError;
+use crate::connection::{Config, FrameInput, FrameSenders};
+
+use crate::errors::{ConnectionError, TChannelError};
 use crate::frames::headers::InitHeaderKey;
 use crate::frames::payloads::Init;
 use crate::frames::payloads::{Codec, ErrorMsg, PROTOCOL_VERSION};
@@ -17,13 +18,15 @@ use std::iter::FromIterator;
 use std::sync::Arc;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::mpsc::Receiver;
+
+
 use tokio_util::codec::{FramedRead, FramedWrite};
 
 #[derive(Debug)]
 pub struct Server {
     subchannels: SharedSubChannels,
     frame_senders: Arc<FrameSenders>,
+    buffer_size: usize,
 }
 
 type TFramedRead = FramedRead<OwnedReadHalf, TFrameIdCodec>;
@@ -34,6 +37,7 @@ impl Server {
         Server {
             subchannels,
             frame_senders: Arc::new(FrameSenders::new(buffer_size)),
+            buffer_size,
         }
     }
 
@@ -66,16 +70,15 @@ impl Server {
             .await?;
 
         let framed_write = Arc::new(framed_write);
-
         framed_read
             .filter_map(Self::skip_if_err)
             .then(|frame| self.frame_senders.send(frame))
-            .filter_map(Self::skip_if_err)
-            .map(|msg_frames| self.handle_msg_frames(msg_frames, framed_write.clone()))
-            .for_each(Self::print_if_err)
+            .filter_map(Self::skip_if_err) //TODO return error msg on ConnectionError::SendError
+            .filter_map(future::ready)
+            .then(|msg_frames| self.handle_msg_frames(msg_frames, framed_write.clone()))
+            .for_each(Self::log_if_err)
             .await;
-
-        todo!()
+        Ok(())
     }
 
     async fn handle_init_handshake(
@@ -132,27 +135,30 @@ impl Server {
         Ok(framed_write.send(init_frame_id).await?)
     }
 
-    fn handle_msg_frames(
+    async fn handle_msg_frames(
         &self,
-        _msg_frames: Option<Receiver<TFrameId>>,
+        _frame_input: FrameInput,
         _framed_write: Arc<TFramedWrite>,
-    ) -> Result<(), ConnectionError> {
-        // match
-        Ok(())
+    ) -> Result<(), TChannelError> {
+        // let (response_code, args, arg_scheme) =
+        //     Defragmenter::new(frame_input).read_response().await?;
+        //
+        // Ok(())
+        todo!()
     }
 
-    fn skip_if_err<T, Err: Debug>(frame_res: Result<T, Err>) -> impl Future<Output = Option<T>> {
-        match frame_res {
-            Ok(frame) => future::ready(Some(frame)),
+    fn skip_if_err<T, Err: Debug>(result: Result<T, Err>) -> impl Future<Output = Option<T>> {
+        match result {
+            Ok(value) => future::ready(Some(value)),
             Err(err) => {
-                error!("Frame handling failure: {:?}", err);
+                error!("Failure: {:?}", err);
                 future::ready(None)
             }
         }
     }
 
     //TODO ugly. async for sake of Stream#for_each.
-    async fn print_if_err(res: Result<(), ConnectionError>) {
+    async fn log_if_err(res: Result<(), TChannelError>) {
         if let Some(err) = res.err() {
             error!("Request handling failure: {:?}", err);
         }

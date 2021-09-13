@@ -1,6 +1,6 @@
 use crate::connection::pool::ConnectionPools;
 use crate::connection::{FrameInput, FrameOutput};
-use crate::defragmentation::Defragmenter;
+use crate::defragmentation::ResponseDefragmenter;
 use crate::errors::{ConnectionError, HandlerError, TChannelError};
 use crate::fragmentation::Fragmenter;
 use crate::frames::payloads::ResponseCode;
@@ -97,7 +97,9 @@ impl SubChannel {
             join!(self.connect(host), self.create_frames(request.try_into()?));
         let (frames_in, frames_out) = connection_res?;
         send_frames(frames_res?, &frames_out).await?;
-        let response = Defragmenter::new(frames_in).create_response().await;
+        let response = ResponseDefragmenter::new(frames_in)
+            .read_response_msg()
+            .await;
         frames_out.close().await; //TODO ugly
         response
     }

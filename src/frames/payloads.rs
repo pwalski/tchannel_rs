@@ -171,7 +171,7 @@ impl Codec for CallArgs {
 }
 
 #[derive(Debug, Getters, new)]
-pub struct CallFieldsEncoded {
+pub struct CallWithFieldsEncoded {
     #[get = "pub"]
     /// flags:1
     flags: Flags,
@@ -183,7 +183,7 @@ pub struct CallFieldsEncoded {
     args: CallArgs,
 }
 
-impl Codec for CallFieldsEncoded {
+impl Codec for CallWithFieldsEncoded {
     fn encode(self, dst: &mut BytesMut) -> Result<(), CodecError> {
         dst.put_u8(self.flags.bits());
         dst.put(self.fields);
@@ -192,12 +192,23 @@ impl Codec for CallFieldsEncoded {
     }
 
     fn decode(src: &mut Bytes) -> Result<Self, CodecError> {
-        Ok(CallFieldsEncoded::new(
+        Ok(CallWithFieldsEncoded::new(
             decode_bitflag(src.get_u8(), Flags::from_bits)?,
             CallRequestFields::decode(src)?.encode_bytes()?,
             CallArgs::decode(src)?,
         ))
     }
+}
+
+pub trait Call<FIELDS: CallFields> {
+    fn fields(self) -> FIELDS;
+    fn flags(&self) -> Flags;
+    fn args(&mut self) -> &mut CallArgs;
+}
+
+pub trait CallFields {
+    fn headers(&self) -> &HashMap<String, String>;
+    fn tracing(&self) -> &Tracing;
 }
 
 #[derive(Debug, Getters, new)]
@@ -235,18 +246,28 @@ impl Codec for CallRequestFields {
     }
 }
 
+impl CallFields for CallRequestFields {
+    fn headers(&self) -> &HashMap<String, String> {
+        &self.headers
+    }
+
+    fn tracing(&self) -> &Tracing {
+        &self.tracing
+    }
+}
+
 #[derive(Debug, Getters, MutGetters, new)]
 pub struct CallRequest {
     #[get = "pub"]
     /// flags:1
-    flags: Flags,
+    pub flags: Flags,
     #[get = "pub"]
     /// ttl, tracing, service name, headers
-    fields: CallRequestFields,
+    pub fields: CallRequestFields,
     #[get = "pub"]
     #[get_mut = "pub"]
     /// checksum type, checksum, args
-    args: CallArgs,
+    pub args: CallArgs,
 }
 
 impl Codec for CallRequest {
@@ -263,6 +284,20 @@ impl Codec for CallRequest {
             CallRequestFields::decode(src)?,
             CallArgs::decode(src)?,
         ))
+    }
+}
+
+impl Call<CallRequestFields> for CallRequest {
+    fn fields(self) -> CallRequestFields {
+        self.fields
+    }
+
+    fn flags(&self) -> Flags {
+        self.flags
+    }
+
+    fn args(&mut self) -> &mut CallArgs {
+        &mut self.args
     }
 }
 
@@ -296,6 +331,16 @@ impl Codec for CallResponseFields {
     }
 }
 
+impl CallFields for CallResponseFields {
+    fn headers(&self) -> &HashMap<String, String> {
+        &self.headers
+    }
+
+    fn tracing(&self) -> &Tracing {
+        &self.tracing
+    }
+}
+
 #[derive(Debug, Getters, MutGetters, new)]
 pub struct CallResponse {
     /// flags:1
@@ -324,6 +369,20 @@ impl Codec for CallResponse {
             CallResponseFields::decode(src)?,
             CallArgs::decode(src)?,
         ))
+    }
+}
+
+impl Call<CallResponseFields> for CallResponse {
+    fn fields(self) -> CallResponseFields {
+        self.fields
+    }
+
+    fn flags(&self) -> Flags {
+        self.flags
+    }
+
+    fn args(&mut self) -> &mut CallArgs {
+        &mut self.args
     }
 }
 

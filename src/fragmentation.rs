@@ -4,8 +4,8 @@ use crate::frames::headers::TransportHeaderKey::CallerName;
 use crate::frames::headers::{ArgSchemeValue, TransportHeaderKey};
 use crate::frames::payloads::Codec;
 use crate::frames::payloads::{
-    CallArgs, CallContinue, CallFieldsEncoded, CallRequestFields, ChecksumType, Flags, TraceFlags,
-    Tracing, ARG_LEN_LEN,
+    CallArgs, CallContinue, CallRequestFields, CallWithFieldsEncoded, ChecksumType, Flags,
+    TraceFlags, Tracing, ARG_LEN_LEN,
 };
 use crate::frames::{TFrame, TFrameStream, Type, FRAME_HEADER_LENGTH, FRAME_MAX_LENGTH};
 use bytes::Buf;
@@ -35,7 +35,7 @@ impl Fragmenter {
         let flag = self.current_frame_flag();
 
         let mut call_frames = Vec::new();
-        let call_request = CallFieldsEncoded::new(flag, request_fields, frame_args);
+        let call_request = CallWithFieldsEncoded::new(flag, request_fields, frame_args);
         debug!("Creating call request {:?}", call_request);
         call_frames.push(TFrame::new(Type::CallRequest, call_request.encode_bytes()?));
 

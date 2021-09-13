@@ -3,6 +3,7 @@ use crate::frames::{TFrameId, Type};
 use bb8::RunError;
 use std::fmt::{Display, Formatter};
 use std::string::FromUtf8Error;
+use strum::ParseError;
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -39,6 +40,9 @@ pub enum CodecError {
 
     #[error(transparent)]
     StringDecodingError(#[from] FromUtf8Error),
+
+    #[error(transparent)]
+    ParseError(#[from] ParseError),
 }
 
 /// Host connection error.
@@ -61,6 +65,9 @@ pub enum ConnectionError {
 
     #[error("Error message: {0:?}")]
     MessageError(ErrorMsg),
+
+    #[error("Error message: {0:?}")]
+    MessageErrorId(ErrorMsg, u32),
 
     #[error("Unexpected response: {0:?}")]
     UnexpectedResponseError(Type),
