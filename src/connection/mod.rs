@@ -80,15 +80,16 @@ impl FrameSenders {
     }
 
     pub async fn send_first(&self, frame: TFrameId) -> Result<Receiver<TFrameId>, ConnectionError> {
-        let id = frame.id();
+        let id = (*frame.id()).clone();
         debug!("Received frame with id: {}", id);
         let mut senders = self.senders.write().await;
-        if let Some(_sender) = senders.get(id) {
+        if let Some(_sender) = senders.get(&id) {
             let msg = format!("Sender for id {} exists", id);
             return Err(ConnectionError::Error(msg));
         }
         let (sender, receiver) = mpsc::channel::<TFrameId>(self.buffer_size);
-        senders.insert(*id, sender);
+        sender.send(frame).await?;
+        senders.insert(id, sender);
         Ok(receiver)
     }
 

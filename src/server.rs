@@ -1,6 +1,6 @@
 use crate::channel::SharedSubChannels;
 use crate::connection::{Config, FrameInput, FrameSenders};
-
+use crate::defragmentation::RequestDefragmenter;
 use crate::errors::{ConnectionError, TChannelError};
 use crate::frames::headers::InitHeaderKey;
 use crate::frames::payloads::Init;
@@ -10,7 +10,7 @@ use bytes::BytesMut;
 use futures::{self, Future};
 use futures::{future, StreamExt};
 use futures::{SinkExt, TryFutureExt};
-use log::debug;
+use log::{debug, trace};
 use std::array::IntoIter;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -18,8 +18,6 @@ use std::iter::FromIterator;
 use std::sync::Arc;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::{TcpListener, TcpStream};
-
-
 use tokio_util::codec::{FramedRead, FramedWrite};
 
 #[derive(Debug)]
@@ -137,19 +135,26 @@ impl Server {
 
     async fn handle_msg_frames(
         &self,
-        _frame_input: FrameInput,
+        frame_input: FrameInput,
         _framed_write: Arc<TFramedWrite>,
     ) -> Result<(), TChannelError> {
-        // let (response_code, args, arg_scheme) =
-        //     Defragmenter::new(frame_input).read_response().await?;
-        //
-        // Ok(())
+        let (response_fields, args, arg_scheme) =
+            RequestDefragmenter::new(frame_input).read_request().await?;
+        println!(
+            "Got fields '{:?}', scheme: '{:?}', args: '{:?}'",
+            response_fields, args, arg_scheme
+        );
         todo!()
     }
 
-    fn skip_if_err<T, Err: Debug>(result: Result<T, Err>) -> impl Future<Output = Option<T>> {
+    fn skip_if_err<T: Debug, Err: Debug>(
+        result: Result<T, Err>,
+    ) -> impl Future<Output = Option<T>> {
         match result {
-            Ok(value) => future::ready(Some(value)),
+            Ok(value) => {
+                trace!("Got: {:?}", value);
+                future::ready(Some(value))
+            }
             Err(err) => {
                 error!("Failure: {:?}", err);
                 future::ready(None)

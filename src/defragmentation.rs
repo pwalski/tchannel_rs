@@ -9,7 +9,6 @@ use crate::frames::Type;
 use crate::messages::{Message, MessageArgs};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::collections::VecDeque;
-use std::convert::TryFrom;
 use std::str::FromStr;
 
 #[derive(Debug)]
@@ -23,6 +22,7 @@ impl ResponseDefragmenter {
         ResponseDefragmenter { defragmenter }
     }
 
+    #[allow(dead_code)]
     pub async fn read_response(
         self,
     ) -> Result<(CallResponseFields, Vec<Bytes>, ArgSchemeValue), TChannelError> {
@@ -52,9 +52,9 @@ pub struct RequestDefragmenter {
 }
 
 impl RequestDefragmenter {
-    pub fn new(frame_input: FrameInput) -> ResponseDefragmenter {
+    pub fn new(frame_input: FrameInput) -> RequestDefragmenter {
         let defragmenter = Defragmenter::new(frame_input);
-        ResponseDefragmenter { defragmenter }
+        RequestDefragmenter { defragmenter }
     }
 
     pub async fn read_request(
@@ -65,6 +65,7 @@ impl RequestDefragmenter {
             .await
     }
 
+    #[allow(dead_code)]
     pub async fn read_request_msg<MSG: Message>(self) -> Result<MSG, TChannelError> {
         let _checker = ArgSchemeChecker {
             arg_scheme: MSG::args_scheme(),
