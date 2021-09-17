@@ -23,9 +23,7 @@ impl ResponseDefragmenter {
     }
 
     #[allow(dead_code)]
-    pub async fn read_response(
-        self,
-    ) -> Result<(CallResponseFields, Vec<Bytes>, ArgSchemeValue), TChannelError> {
+    pub async fn read_response(self) -> Result<(CallResponseFields, MessageArgs), TChannelError> {
         self.defragmenter
             .read(Type::CallResponse, CallResponse::decode)
             .await
@@ -34,14 +32,13 @@ impl ResponseDefragmenter {
     pub async fn read_response_msg<MSG: Message>(
         self,
     ) -> Result<(ResponseCode, MSG), TChannelError> {
-        let (fields, args, arg_scheme) = self
+        let (fields, message_args) = self
             .defragmenter
             .read_and_check(Type::CallResponse, CallResponse::decode, |fields| {
                 ArgSchemeChecker::new(MSG::args_scheme()).check_args_scheme(fields)
             })
             .await?;
-        let msg_args = MessageArgs::new(arg_scheme, args);
-        let msg = MSG::try_from(msg_args)?;
+        let msg = MSG::try_from(message_args)?;
         Ok((fields.code, msg))
     }
 }
@@ -57,9 +54,7 @@ impl RequestDefragmenter {
         RequestDefragmenter { defragmenter }
     }
 
-    pub async fn read_request(
-        self,
-    ) -> Result<(CallRequestFields, Vec<Bytes>, ArgSchemeValue), TChannelError> {
+    pub async fn read_request(self) -> Result<(CallRequestFields, MessageArgs), TChannelError> {
         self.defragmenter
             .read(Type::CallRequest, CallRequest::decode)
             .await
@@ -70,14 +65,13 @@ impl RequestDefragmenter {
         let _checker = ArgSchemeChecker {
             arg_scheme: MSG::args_scheme(),
         };
-        let (_, args, arg_scheme) = self
+        let (_, message_args) = self
             .defragmenter
             .read_and_check(Type::CallRequest, CallRequest::decode, |fields| {
                 ArgSchemeChecker::new(MSG::args_scheme()).check_args_scheme(fields)
             })
             .await?;
-        let msg_args = MessageArgs::new(arg_scheme, args);
-        Ok(MSG::try_from(msg_args)?)
+        Ok(MSG::try_from(message_args)?)
     }
 }
 
@@ -91,7 +85,7 @@ impl Defragmenter {
         self,
         frame_type: Type,
         decoder: fn(src: &mut Bytes) -> Result<FRAME, CodecError>,
-    ) -> Result<(FIELDS, Vec<Bytes>, ArgSchemeValue), TChannelError> {
+    ) -> Result<(FIELDS, MessageArgs), TChannelError> {
         self.read_and_check(frame_type, decoder, get_args_scheme)
             .await
     }
@@ -101,17 +95,19 @@ impl Defragmenter {
         frame_type: Type,
         decode: fn(src: &mut Bytes) -> Result<FRAME, CodecError>,
         check_fields: fn(fields: &FIELDS) -> Result<ArgSchemeValue, CodecError>,
-    ) -> Result<(FIELDS, Vec<Bytes>, ArgSchemeValue), TChannelError> {
+    ) -> Result<(FIELDS, MessageArgs), TChannelError> {
         let mut args_defragmenter = ArgsDefragmenter::default();
         let (fields, flags) = self
             .read_beginning(frame_type, decode, &mut args_defragmenter)
             .await?;
         let args_scheme = check_fields(&fields)?;
         if !flags.contains(Flags::MORE_FRAGMENTS_FOLLOW) {
-            return Ok((fields, args_defragmenter.args(), args_scheme));
+            let message_args = MessageArgs::new(args_scheme, args_defragmenter.args());
+            return Ok((fields, message_args));
         }
         read_continuation(&mut self.frame_input, &mut args_defragmenter).await?;
-        Ok((fields, args_defragmenter.args(), args_scheme))
+        let message_args = MessageArgs::new(args_scheme, args_defragmenter.args());
+        Ok((fields, message_args))
     }
 
     async fn read_beginning<FIELDS: CallFields, FRAME: Codec + Call<FIELDS>>(

@@ -45,42 +45,81 @@ impl Default for Config {
     }
 }
 
+pub type FrameInput = Receiver<TFrameId>;
+
+#[derive(Debug)]
+pub struct FrameOutput {
+    message_id: u32,
+    sender: Sender<TFrameId>,
+    frames_dispatcher: Arc<FramesDispatcher>,
+}
+
+impl FrameOutput {
+    pub async fn send(&self, frame: TFrame) -> Result<(), ConnectionError> {
+        let frame = TFrameId::new(self.message_id, frame);
+        debug!("Passing frame {:?} to sender.", frame);
+        Ok(self.sender.send(frame).await?)
+    }
+
+    //TODO figure out how to automatically close it? impl Sink? do it on Drop (which is not async)?
+    pub async fn close(&self) {
+        self.frames_dispatcher.deregister(&self.message_id).await;
+    }
+}
+
+pub async fn create_frames_io(
+    message_id: u32,
+    frames_dispatcher: Arc<FramesDispatcher>,
+) -> Result<(FrameInput, FrameOutput), ConnectionError> {
+    let (sender, receiver) = mpsc::channel::<TFrameId>(10); //TODO configure?
+    frames_dispatcher
+        .register(message_id, sender.clone())
+        .await?;
+    let frame_output = FrameOutput {
+        message_id,
+        sender,
+        frames_dispatcher,
+    };
+    Ok((receiver, frame_output))
+}
+
 /// Pending Message Ids mapped to Senders of frames for given message Id.
 #[derive(Debug, Default, new)]
-pub struct FrameSenders {
+pub struct FramesDispatcher {
     #[new(default)]
     senders: RwLock<HashMap<u32, Sender<TFrameId>>>,
     buffer_size: usize,
 }
 
-impl FrameSenders {
-    pub async fn send(
-        &self,
-        frame: TFrameId,
-    ) -> Result<Option<Receiver<TFrameId>>, ConnectionError> {
+/// Dispatches frames to channels according to their IDs.
+impl FramesDispatcher {
+    /// Dispatches frame to channel.
+    /// Returns `Receiver` of new channel if it got created for given frame.
+    pub async fn dispatch(&self, frame: TFrameId) -> Result<Option<FrameInput>, ConnectionError> {
         let senders = self.senders.read().await;
         if let Some(sender) = senders.get(frame.id()) {
             return Ok(sender.send(frame).map_ok(|_| None).await?);
         }
         std::mem::drop(senders);
         //TODO it will return error on check if it got concurrently inserted
-        Ok(self.send_first(frame).map_ok(Some).await?)
+        Ok(self.dispatch_first(frame).map_ok(Some).await?)
     }
 
-    pub async fn remove(&self, id: &u32) -> Option<Sender<TFrameId>> {
+    pub async fn deregister(&self, id: &u32) -> Option<Sender<TFrameId>> {
         let mut channels = self.senders.write().await;
         channels.remove(id)
     }
 
-    //TODO cleanup methods below
-
-    pub async fn add(&self, id: u32, sender: Sender<TFrameId>) {
+    pub async fn register(&self, id: u32, sender: Sender<TFrameId>) -> Result<(), ConnectionError> {
         let mut channels = self.senders.write().await;
-        channels.insert(id, sender);
+        if channels.insert(id, sender).is_none() {
+            return Err(ConnectionError::Error(format!("Duplicated id: {}.", id)));
+        }
+        Ok(())
     }
 
-    pub async fn send_first(&self, frame: TFrameId) -> Result<Receiver<TFrameId>, ConnectionError> {
-        let id = (*frame.id()).clone();
+    async fn dispatch_first(&self, frame: TFrameId) -> Result<Receiver<TFrameId>, ConnectionError> {
+        let id = *frame.id();
         debug!("Received frame with id: {}", id);
         let mut senders = self.senders.write().await;
         if let Some(_sender) = senders.get(&id) {
@@ -93,7 +132,7 @@ impl FrameSenders {
         Ok(receiver)
     }
 
-    pub async fn send_following(&self, frame: TFrameId) -> Result<(), ConnectionError> {
+    pub async fn dispatch_following(&self, frame: TFrameId) -> Result<(), ConnectionError> {
         let id = *frame.id();
         debug!("Received frame with id: {}", id);
         let senders = self.senders.read().await;
@@ -107,7 +146,7 @@ impl FrameSenders {
 #[derive(Debug)]
 pub struct Connection {
     next_message_id: AtomicU32,
-    pending_ids: Arc<FrameSenders>,
+    pending_ids: Arc<FramesDispatcher>,
     sender: Sender<TFrameId>,
     buffer_size: usize,
 }
@@ -116,7 +155,7 @@ impl Connection {
     pub fn new(sender: Sender<TFrameId>, buffer_size: usize) -> Connection {
         Connection {
             next_message_id: AtomicU32::default(),
-            pending_ids: Arc::new(FrameSenders::new(buffer_size)),
+            pending_ids: Arc::new(FramesDispatcher::new(buffer_size)),
             sender,
             buffer_size,
         }
@@ -138,7 +177,7 @@ impl Connection {
 
     /// Prepares frame I/O with new message id. Then sends `frame` and awaits for response.
     pub async fn send_one(&self, frame: TFrame) -> Result<TFrameId, ConnectionError> {
-        let (mut frame_input, frame_output) = self.new_frames_io().await;
+        let (mut frame_input, frame_output) = self.new_frames_io().await?;
         frame_output.send(frame).await?;
         let response = frame_input.recv().await;
         frame_output.close().await;
@@ -147,39 +186,12 @@ impl Connection {
 
     /// Prepares frame I/O with new message id.
     /// Then returns both input and output which allows to send multiple frames with same message id.
-    pub async fn new_frames_io(&self) -> (FrameInput, FrameOutput) {
-        let message_id = self.next_message_id();
-        let (sender, receiver) = mpsc::channel::<TFrameId>(10); //TODO configure
-        self.pending_ids.add(message_id, sender).await;
-        let frame_output =
-            FrameOutput::new(message_id, self.sender.clone(), self.pending_ids.clone());
-        (receiver, frame_output)
+    pub async fn new_frames_io(&self) -> Result<(FrameInput, FrameOutput), ConnectionError> {
+        create_frames_io(self.next_message_id(), self.pending_ids.clone()).await
     }
 
     fn next_message_id(&self) -> u32 {
         self.next_message_id.fetch_add(1, Ordering::Relaxed)
-    }
-}
-
-pub type FrameInput = Receiver<TFrameId>;
-
-#[derive(Getters, new)]
-pub struct FrameOutput {
-    message_id: u32,
-    sender: Sender<TFrameId>,
-    pending_ids: Arc<FrameSenders>,
-}
-
-impl FrameOutput {
-    pub async fn send(&self, frame: TFrame) -> Result<(), ConnectionError> {
-        let frame = TFrameId::new(self.message_id, frame);
-        debug!("Passing frame {:?} to sender.", frame);
-        Ok(self.sender.send(frame).await?)
-    }
-
-    //TODO figure out how to automatically close it? impl Sink? do it on Drop (which is not async)?
-    pub async fn close(&self) {
-        self.pending_ids.remove(&self.message_id).await;
     }
 }
 
@@ -230,13 +242,13 @@ impl FrameSender {
 }
 
 struct FrameReceiver {
-    frame_senders: Arc<FrameSenders>,
+    frame_senders: Arc<FramesDispatcher>,
 }
 
 impl FrameReceiver {
     pub fn spawn(
         framed_read: FramedRead<OwnedReadHalf, TFrameIdCodec>,
-        frame_senders: Arc<FrameSenders>,
+        frame_senders: Arc<FramesDispatcher>,
     ) -> JoinHandle<()> {
         let frame_receiver = FrameReceiver { frame_senders };
         tokio::spawn(async move {
@@ -251,7 +263,7 @@ impl FrameReceiver {
         debug!("Starting FrameReceiver");
         framed_read
             .filter_map(Self::print_if_err_and_skip)
-            .map(|frame| self.frame_senders.send_following(frame))
+            .map(|frame| self.frame_senders.dispatch_following(frame))
             .for_each(Self::print_if_err)
             .await
     }

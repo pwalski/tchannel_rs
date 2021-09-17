@@ -67,6 +67,7 @@ pub enum ErrorCode {
 }
 
 bitflags! {
+    #[derive(Default)]
     pub struct Flags: u8 {
         const NONE = 0x00; //TODO bit useless
         const MORE_FRAGMENTS_FOLLOW = 0x01;
@@ -75,13 +76,14 @@ bitflags! {
 }
 
 bitflags! {
+    #[derive(Default)]
     pub struct TraceFlags: u8 {
         const NONE = 0x00; //TODO bit useless
         const ENABLED = 0x01;
     }
 }
 
-#[derive(Debug, PartialEq, Getters, new)]
+#[derive(Debug, PartialEq, Default, Getters, new)]
 pub struct Tracing {
     #[get = "pub"]
     span_id: u64,

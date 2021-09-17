@@ -1,10 +1,11 @@
-use crate::frames::payloads::ErrorMsg;
+use crate::frames::payloads::{ErrorCode, ErrorMsg, Tracing};
 use crate::frames::{TFrameId, Type};
 use bb8::RunError;
 use std::fmt::{Display, Formatter};
 use std::string::FromUtf8Error;
 use strum::ParseError;
 use thiserror::Error;
+use tokio::sync::mpsc::error::SendError;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum TChannelError {
@@ -60,12 +61,8 @@ pub enum ConnectionError {
     #[error(transparent)]
     FrameError(#[from] CodecError),
 
-    #[error(transparent)]
-    SendError(#[from] SendError),
-
-    #[error("Error message: {0:?}")]
-    MessageError(ErrorMsg),
-
+    // #[error("Error message: {0:?}")]
+    // MessageError(ErrorMsg),
     #[error("Error message: {0:?}")]
     MessageErrorId(ErrorMsg, u32),
 
@@ -82,21 +79,6 @@ pub enum HandlerError {
 
     #[error("Handler registration error: {0}")]
     RegistrationError(String),
-}
-
-#[derive(Error, Debug)]
-pub struct SendError(tokio::sync::mpsc::error::SendError<TFrameId>);
-
-impl PartialEq for SendError {
-    fn eq(&self, _other: &Self) -> bool {
-        false
-    }
-}
-
-impl Display for SendError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
 }
 
 #[derive(Error, Debug)]
@@ -126,12 +108,6 @@ impl From<std::io::Error> for ConnectionError {
     }
 }
 
-impl From<tokio::sync::mpsc::error::SendError<TFrameId>> for ConnectionError {
-    fn from(err: tokio::sync::mpsc::error::SendError<TFrameId>) -> Self {
-        ConnectionError::SendError(SendError(err))
-    }
-}
-
 impl From<String> for TChannelError {
     fn from(err: String) -> Self {
         TChannelError::Error(err)
@@ -147,5 +123,18 @@ impl From<String> for ConnectionError {
 impl From<String> for CodecError {
     fn from(err: String) -> Self {
         CodecError::Error(err)
+    }
+}
+
+impl From<SendError<TFrameId>> for ConnectionError {
+    fn from(err: SendError<TFrameId>) -> Self {
+        ConnectionError::MessageErrorId(
+            ErrorMsg::new(
+                ErrorCode::UnexpectedError,
+                Tracing::default(),
+                format!("Failed to handle frame: {}", err),
+            ),
+            *err.0.id(),
+        )
     }
 }

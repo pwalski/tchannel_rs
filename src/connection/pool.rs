@@ -1,6 +1,6 @@
 use crate::connection::{Config, Connection};
 use crate::errors::ConnectionError;
-use crate::errors::ConnectionError::{MessageError, UnexpectedResponseError};
+use crate::errors::ConnectionError::{MessageErrorId, UnexpectedResponseError};
 use crate::frames::payloads::ErrorMsg;
 use crate::frames::payloads::Init;
 use crate::frames::payloads::{Codec, PROTOCOL_VERSION};
@@ -124,7 +124,7 @@ async fn verify(connection: Connection) -> Result<Connection, ConnectionError> {
         Type::Error => {
             let error = ErrorMsg::decode(frame_id.frame.payload_mut())?;
             debug!("Received error response {:?}", error);
-            Err(ConnectionError::MessageError(error))
+            Err(ConnectionError::MessageErrorId(error, *frame_id.id()))
         }
         other_type => Err(ConnectionError::UnexpectedResponseError(*other_type)),
     }
@@ -144,10 +144,12 @@ async fn ping(connection: &Connection) -> Result<(), ConnectionError> {
     connection
         .send_one(ping_req)
         .await
-        .map(|frame_id| frame_id.frame)
-        .map(|mut frame| match frame.frame_type() {
+        .map(|mut frame_id| match frame_id.frame.frame_type() {
             Type::PingResponse => Ok(()),
-            Type::Error => Err(MessageError(ErrorMsg::decode(frame.payload_mut())?)),
+            Type::Error => Err(MessageErrorId(
+                ErrorMsg::decode(frame_id.frame.payload_mut())?,
+                *frame_id.id(),
+            )),
             frame_type => Err(UnexpectedResponseError(*frame_type)),
         })?
 }

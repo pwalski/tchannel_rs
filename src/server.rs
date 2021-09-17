@@ -1,15 +1,16 @@
 use crate::channel::SharedSubChannels;
-use crate::connection::{Config, FrameInput, FrameSenders};
+use crate::connection::{Config, FrameInput, FramesDispatcher};
 use crate::defragmentation::RequestDefragmenter;
 use crate::errors::{ConnectionError, TChannelError};
 use crate::frames::headers::InitHeaderKey;
 use crate::frames::payloads::Init;
 use crate::frames::payloads::{Codec, ErrorMsg, PROTOCOL_VERSION};
 use crate::frames::{TFrame, TFrameId, TFrameIdCodec, Type};
+use crate::SubChannel;
 use bytes::BytesMut;
+use futures::SinkExt;
 use futures::{self, Future};
 use futures::{future, StreamExt};
-use futures::{SinkExt, TryFutureExt};
 use log::{debug, trace};
 use std::array::IntoIter;
 use std::collections::HashMap;
@@ -23,7 +24,7 @@ use tokio_util::codec::{FramedRead, FramedWrite};
 #[derive(Debug)]
 pub struct Server {
     subchannels: SharedSubChannels,
-    frame_senders: Arc<FrameSenders>,
+    frame_dispatchers: Arc<FramesDispatcher>,
     buffer_size: usize,
 }
 
@@ -34,7 +35,7 @@ impl Server {
     pub fn new(subchannels: SharedSubChannels, buffer_size: usize) -> Server {
         Server {
             subchannels,
-            frame_senders: Arc::new(FrameSenders::new(buffer_size)),
+            frame_dispatchers: Arc::new(FramesDispatcher::new(buffer_size)),
             buffer_size,
         }
     }
@@ -51,10 +52,9 @@ impl Server {
             let subchannels = subchannels.clone();
             let mut server = Server::new(subchannels, config.frame_buffer_size);
             tokio::spawn(async move {
-                server
-                    .handle_connection(stream)
-                    .map_err(|err| debug!("Connection error: {}", err))
-                    .await
+                if let Err(err) = server.handle_connection(stream).await {
+                    error!("Connection error: {}", err);
+                }
             });
         }
     }
@@ -70,13 +70,24 @@ impl Server {
         let framed_write = Arc::new(framed_write);
         framed_read
             .filter_map(Self::skip_if_err)
-            .then(|frame| self.frame_senders.send(frame))
+            .then(|frame| self.dispatch_frame(frame))
             .filter_map(Self::skip_if_err) //TODO return error msg on ConnectionError::SendError
-            .filter_map(future::ready)
-            .then(|msg_frames| self.handle_msg_frames(msg_frames, framed_write.clone()))
+            .filter_map(future::ready) //ugh
+            .then(|(id, frame_input)| self.handle_msg_frames(id, frame_input, framed_write.clone()))
             .for_each(Self::log_if_err)
             .await;
         Ok(())
+    }
+
+    async fn dispatch_frame(
+        &self,
+        frame: TFrameId,
+    ) -> Result<Option<(u32, FrameInput)>, ConnectionError> {
+        let id = *frame.id();
+        self.frame_dispatchers
+            .dispatch(frame)
+            .await
+            .map(|receiver_option| receiver_option.map(|receiver| (id, receiver)))
     }
 
     async fn handle_init_handshake(
@@ -86,8 +97,9 @@ impl Server {
     ) -> Result<(), ConnectionError> {
         match framed_read.next().await {
             Some(Ok(mut frame_id)) => {
-                Self::check_init_req(&mut frame_id.frame).await?;
-                Ok(Self::send_init_res(framed_write, *frame_id.id()).await?)
+                Self::check_init_req(&mut frame_id).await?;
+                Self::send_init_res(framed_write, *frame_id.id()).await?;
+                Ok(())
             }
             Some(Err(err)) => Err(ConnectionError::FrameError(err)),
             None => Err(ConnectionError::Error(
@@ -96,7 +108,8 @@ impl Server {
         }
     }
 
-    async fn check_init_req(frame: &mut TFrame) -> Result<(), ConnectionError> {
+    async fn check_init_req(frame_id: &mut TFrameId) -> Result<(), ConnectionError> {
+        let frame = frame_id.frame_mut();
         match frame.frame_type() {
             Type::InitRequest => {
                 let init = Init::decode(frame.payload_mut())?;
@@ -111,7 +124,7 @@ impl Server {
             }
             Type::Error => {
                 let error = ErrorMsg::decode(frame.payload_mut())?;
-                Err(ConnectionError::MessageError(error))
+                Err(ConnectionError::MessageErrorId(error, *frame_id.id()))
             }
             other_type => Err(ConnectionError::UnexpectedResponseError(*other_type)),
         }
@@ -135,15 +148,16 @@ impl Server {
 
     async fn handle_msg_frames(
         &self,
+        id: u32,
         frame_input: FrameInput,
         _framed_write: Arc<TFramedWrite>,
     ) -> Result<(), TChannelError> {
-        let (response_fields, args, arg_scheme) =
+        let (request_fields, message_args) =
             RequestDefragmenter::new(frame_input).read_request().await?;
-        println!(
-            "Got fields '{:?}', scheme: '{:?}', args: '{:?}'",
-            response_fields, args, arg_scheme
-        );
+        //TODO start handling TTL here?
+        self.frame_dispatchers.deregister(&id).await;
+        let subchannel = self.get_subchannel(request_fields.service()).await?;
+        let _response = subchannel.handle(message_args).await?;
         todo!()
     }
 
@@ -167,5 +181,15 @@ impl Server {
         if let Some(err) = res.err() {
             error!("Request handling failure: {:?}", err);
         }
+    }
+
+    async fn get_subchannel<STR: AsRef<str>>(
+        &self,
+        service: STR,
+    ) -> Result<Arc<SubChannel>, TChannelError> {
+        let subchannels = self.subchannels.read().await;
+        subchannels.get(service.as_ref()).cloned().ok_or_else(|| {
+            TChannelError::Error(format!("Failed to find subchannel '{}'", service.as_ref()))
+        })
     }
 }
