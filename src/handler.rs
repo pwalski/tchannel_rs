@@ -1,5 +1,5 @@
 use crate::errors::TChannelError;
-use crate::frames::payloads::ResponseCode;
+use crate::messages::ResponseCode;
 use crate::messages::{Message, MessageArgs, MessageArgsResponse};
 use futures::{future, Future};
 use std::fmt::Debug;
@@ -25,7 +25,7 @@ pub trait RequestHandlerAsync: Debug + Sync + Send {
 pub trait RequestHandler: Debug + Sync + Send {
     type REQ: Message;
     type RES: Message;
-    fn handle(&self, request: Self::REQ) -> Response<Self::RES>;
+    fn handle(&mut self, request: Self::REQ) -> Response<Self::RES>;
 }
 
 pub(crate) trait MessageArgsHandler: Debug + Send + Sync {

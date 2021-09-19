@@ -1,5 +1,6 @@
 use crate::errors::CodecError;
 use crate::frames::{FRAME_HEADER_LENGTH, FRAME_MAX_LENGTH};
+use crate::messages::ResponseCode;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use num_traits::FromPrimitive;
 use std::collections::{HashMap, VecDeque};
@@ -34,12 +35,6 @@ pub enum ChecksumType {
     Farmhash = 0x02,
     /// crc-32C
     Crc32C = 0x03,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, FromPrimitive, ToPrimitive)]
-pub enum ResponseCode {
-    Ok = 0x00,
-    Error = 0x01,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, FromPrimitive, ToPrimitive)]

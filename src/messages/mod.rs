@@ -1,9 +1,9 @@
 use crate::errors::{CodecError, TChannelError};
 use crate::frames::headers::ArgSchemeValue;
-use crate::frames::payloads::ResponseCode;
 use crate::handler::Response;
 use bytes::Bytes;
 use futures::Future;
+use num_traits::FromPrimitive;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
 use std::net::SocketAddr;
@@ -40,3 +40,9 @@ pub struct MessageArgs {
 }
 
 pub(crate) type MessageArgsResponse = Result<(ResponseCode, MessageArgs), TChannelError>;
+
+#[derive(Copy, Clone, Debug, PartialEq, FromPrimitive, ToPrimitive)]
+pub enum ResponseCode {
+    Ok = 0x00,
+    Error = 0x01,
+}

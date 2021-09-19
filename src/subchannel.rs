@@ -2,13 +2,13 @@ use crate::connection::pool::ConnectionPools;
 use crate::connection::{FrameInput, FrameOutput};
 use crate::defragmentation::ResponseDefragmenter;
 use crate::errors::{CodecError, ConnectionError, HandlerError, TChannelError};
-use crate::fragmentation::Fragmenter;
-use crate::frames::payloads::ResponseCode;
+use crate::fragmentation::RequestFragmenter;
 use crate::frames::TFrameStream;
 use crate::handler::{
     MessageArgsHandler, RequestHandler, RequestHandlerAdapter, RequestHandlerAsync,
     RequestHandlerAsyncAdapter,
 };
+use crate::messages::ResponseCode;
 use crate::messages::{Message, MessageArgs, MessageArgsResponse};
 use futures::join;
 use futures::StreamExt;
@@ -112,8 +112,11 @@ impl SubChannel {
         Ok(connection.new_frames_io().await?)
     }
 
-    async fn create_frames(&self, request: MessageArgs) -> Result<TFrameStream, TChannelError> {
-        Fragmenter::new(self.service_name.clone(), request.arg_scheme, request.args).create_frames()
+    async fn create_frames(
+        &self,
+        request_args: MessageArgs,
+    ) -> Result<TFrameStream, TChannelError> {
+        RequestFragmenter::new(self.service_name.clone(), request_args).create_frames()
     }
 
     pub(crate) async fn handle(&self, request: MessageArgs) -> MessageArgsResponse {

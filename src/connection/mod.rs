@@ -195,7 +195,7 @@ impl Connection {
     }
 }
 
-struct FrameSender {
+pub struct FrameSender {
     framed_write: Arc<Mutex<FramedWrite<OwnedWriteHalf, TFrameIdCodec>>>,
     buffer_size: usize,
 }

@@ -1,24 +1,27 @@
 use crate::channel::SharedSubChannels;
-use crate::connection::{Config, FrameInput, FramesDispatcher};
+use crate::connection::{Config, FrameInput, FrameSender, FramesDispatcher};
 use crate::defragmentation::RequestDefragmenter;
 use crate::errors::{ConnectionError, TChannelError};
+use crate::fragmentation::ResponseFragmenter;
 use crate::frames::headers::InitHeaderKey;
 use crate::frames::payloads::Init;
 use crate::frames::payloads::{Codec, ErrorMsg, PROTOCOL_VERSION};
-use crate::frames::{TFrame, TFrameId, TFrameIdCodec, Type};
+use crate::frames::{TFrame, TFrameId, TFrameIdCodec, TFrameStream, Type};
 use crate::SubChannel;
 use bytes::BytesMut;
-use futures::SinkExt;
 use futures::{self, Future};
 use futures::{future, StreamExt};
+use futures::{SinkExt, Stream};
 use log::{debug, trace};
 use std::array::IntoIter;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::iter::FromIterator;
+use std::pin::Pin;
 use std::sync::Arc;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::mpsc;
 use tokio_util::codec::{FramedRead, FramedWrite};
 
 #[derive(Debug)]
@@ -50,6 +53,9 @@ impl Server {
             let (stream, addr) = listener.accept().await?;
             debug!("Handling incoming connection from {}", addr);
             let subchannels = subchannels.clone();
+
+            // let (sender, receiver) = mpsc::channel::<TFrameId>(buffer_size);
+
             let mut server = Server::new(subchannels, config.frame_buffer_size);
             tokio::spawn(async move {
                 if let Err(err) = server.handle_connection(stream).await {
@@ -67,15 +73,31 @@ impl Server {
         self.handle_init_handshake(&mut framed_read, &mut framed_write)
             .await?;
 
-        let framed_write = Arc::new(framed_write);
+        let (sender, receiver) = mpsc::channel::<TFrameId>(10);
+        FrameSender::spawn(framed_write, receiver, 100);
+
         framed_read
             .filter_map(Self::skip_if_err)
             .then(|frame| self.dispatch_frame(frame))
             .filter_map(Self::skip_if_err) //TODO return error msg on ConnectionError::SendError
             .filter_map(future::ready) //ugh
-            .then(|(id, frame_input)| self.handle_msg_frames(id, frame_input, framed_write.clone()))
-            .for_each(Self::log_if_err)
+            .then(|(id, frame_input)| self.handle_request(id, frame_input))
+            .flat_map(|frame_res| match frame_res {
+                Err(err) => {
+                    error!("Request handling failure: {:?}", err);
+                    //TODO return error?
+                    Box::pin(futures::stream::iter(Vec::new()))
+                }
+                Ok(frame_stream) => Box::pin(futures::stream::iter(frame_stream)),
+            })
+            .for_each(|frame| async {
+                match sender.send(frame).await {
+                    Ok(()) => (),
+                    Err(err) => error!("Failed to send response {}", err),
+                }
+            })
             .await;
+        //??
         Ok(())
     }
 
@@ -140,25 +162,48 @@ impl Server {
             "rust".to_string(),
         )]));
         let init = Init::new(PROTOCOL_VERSION, headers);
-        let mut bytes = BytesMut::new();
-        init.encode(&mut bytes)?;
-        let init_frame_id = TFrameId::new(id, TFrame::new(Type::InitResponse, bytes.freeze()));
+        let init_frame_id =
+            TFrameId::new(id, TFrame::new(Type::InitResponse, init.encode_bytes()?));
         Ok(framed_write.send(init_frame_id).await?)
     }
 
-    async fn handle_msg_frames(
+    async fn handle_request(
         &self,
         id: u32,
         frame_input: FrameInput,
-        _framed_write: Arc<TFramedWrite>,
-    ) -> Result<(), TChannelError> {
+    ) -> Result<Vec<TFrameId>, TChannelError> {
         let (request_fields, message_args) =
             RequestDefragmenter::new(frame_input).read_request().await?;
         //TODO start handling TTL here?
         self.frame_dispatchers.deregister(&id).await;
         let subchannel = self.get_subchannel(request_fields.service()).await?;
-        let _response = subchannel.handle(message_args).await?;
-        todo!()
+        let (response_code, response_args) = subchannel.handle(message_args).await?;
+        Ok(ResponseFragmenter::new(
+            request_fields.service().clone(),
+            response_args,
+            response_code,
+        )
+        .create_frames()?
+        .map(|f| TFrameId::new(id, f))
+        .collect::<Vec<TFrameId>>()
+        .await)
+    }
+
+    async fn send_frames(
+        &self,
+        frames: Vec<TFrameId>,
+        mut framed_write: FramedWrite<OwnedWriteHalf, TFrameIdCodec>,
+    ) {
+        for frame in frames {
+            debug!("Writing frame (id: {})", frame.id());
+            if let Err(err) = framed_write.send(frame).await {
+                error!("Failed to write frame: {}", err);
+            }
+        }
+        debug!("Flushing frames");
+        if let Err(err) = framed_write.flush().await {
+            error!("Failed to flush frames: {}", err);
+        }
     }
 
     fn skip_if_err<T: Debug, Err: Debug>(
