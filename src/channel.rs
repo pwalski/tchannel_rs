@@ -68,16 +68,16 @@ impl TChannel {
     }
 
     pub async fn subchannel<STR: AsRef<str>>(
-        &mut self,
+        &self,
         service_name: STR,
     ) -> Result<Arc<SubChannel>, TChannelError> {
         if let Some(subchannel) = self.subchannels.read().await.get(service_name.as_ref()) {
             return Ok(subchannel.clone());
         }
-        self.make_subchannel(service_name).await
+        self.create_subchannel(service_name).await
     }
 
-    async fn make_subchannel<STR: AsRef<str>>(
+    async fn create_subchannel<STR: AsRef<str>>(
         &self,
         service_name: STR,
     ) -> Result<Arc<SubChannel>, TChannelError> {

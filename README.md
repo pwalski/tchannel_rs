@@ -35,13 +35,13 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 use tchannel_protocol::messages::raw::RawMessage;
 use tchannel_protocol::messages::MessageChannel;
-use tchannel_protocol::{TChannel,ConnectionOptions};
+use tchannel_protocol::{TChannel,Config};
 use tokio::runtime::Runtime;
 
 Runtime::new().unwrap().spawn(async {
     let request = RawMessage::new("endpoint_name".into(), "header".into(), "payload".into());
     let host = SocketAddr::from_str("host_address:port").unwrap();
-    let mut tchannel = TChannel::new(ConnectionOptions::default()).unwrap();
+    let mut tchannel = TChannel::new(Config::default()).unwrap();
     let subchannel = tchannel.subchannel("server".to_owned()).await.unwrap();
     match subchannel.send(request, host).await {
         Ok(response) => println!("Response: {:?}", response),
@@ -61,14 +61,19 @@ cargo readme > README.md
 
 ## Examples Subproject
 
+Sample server:
+```shell
+RUST_LOG=DEBUG cargo run --example server
+```
+
 Sample `tchannel-java` server:
 ```shell
 mvn -f examples-server package exec:exec -Pserver
 ```
 
-Basic client scenario:
+Sample client:
 ```shell
-RUST_LOG=DEBUG cargo run --example basic
+RUST_LOG=DEBUG cargo run --example client
 ```
 
 ---

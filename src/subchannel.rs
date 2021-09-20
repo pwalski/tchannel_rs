@@ -32,7 +32,7 @@ pub struct SubChannel {
 impl SubChannel {
     /// Register request handler.
     pub async fn register<S: AsRef<str>, REQ, RES, HANDLER>(
-        &mut self,
+        &self,
         endpoint: S,
         request_handler: HANDLER,
     ) -> Result<(), HandlerError>
@@ -48,7 +48,7 @@ impl SubChannel {
 
     /// Register async request handler.
     pub async fn register_async<S: AsRef<str>, REQ, RES, HANDLER>(
-        &mut self,
+        &self,
         endpoint: S,
         request_handler: HANDLER,
     ) -> Result<(), HandlerError>
@@ -63,7 +63,7 @@ impl SubChannel {
     }
 
     async fn register_handler<S: AsRef<str>>(
-        &mut self,
+        &self,
         endpoint: S,
         request_handler: HandlerRef,
     ) -> Result<(), HandlerError> {
@@ -123,8 +123,7 @@ impl SubChannel {
         let endpoint = Self::read_endpoint_name(&request)?;
         let handler_locked = self.get_handler(endpoint).await?;
         let mut handler = handler_locked.lock().await; //TODO do I really want Mutex? maybe handle(&self,..) instead of handle(&mut self,..) ?
-        let (_response_code, _message_args) = handler.handle(request).await?;
-        todo!()
+        handler.handle(request).await
     }
 
     async fn get_handler(&self, endpoint: String) -> Result<HandlerRef, TChannelError> {

@@ -47,7 +47,7 @@ impl Default for Config {
 
 pub type FrameInput = Receiver<TFrameId>;
 
-#[derive(Debug)]
+#[derive(Debug, new)]
 pub struct FrameOutput {
     message_id: u32,
     sender: Sender<TFrameId>,
@@ -65,22 +65,6 @@ impl FrameOutput {
     pub async fn close(&self) {
         self.frames_dispatcher.deregister(&self.message_id).await;
     }
-}
-
-pub async fn create_frames_io(
-    message_id: u32,
-    frames_dispatcher: Arc<FramesDispatcher>,
-) -> Result<(FrameInput, FrameOutput), ConnectionError> {
-    let (sender, receiver) = mpsc::channel::<TFrameId>(10); //TODO configure?
-    frames_dispatcher
-        .register(message_id, sender.clone())
-        .await?;
-    let frame_output = FrameOutput {
-        message_id,
-        sender,
-        frames_dispatcher,
-    };
-    Ok((receiver, frame_output))
 }
 
 /// Pending Message Ids mapped to Senders of frames for given message Id.
@@ -112,7 +96,8 @@ impl FramesDispatcher {
 
     pub async fn register(&self, id: u32, sender: Sender<TFrameId>) -> Result<(), ConnectionError> {
         let mut channels = self.senders.write().await;
-        if channels.insert(id, sender).is_none() {
+        if channels.insert(id, sender).is_some() {
+            debug!("Duplicated sender for id: {}", id);
             return Err(ConnectionError::Error(format!("Duplicated id: {}.", id)));
         }
         Ok(())
@@ -187,7 +172,12 @@ impl Connection {
     /// Prepares frame I/O with new message id.
     /// Then returns both input and output which allows to send multiple frames with same message id.
     pub async fn new_frames_io(&self) -> Result<(FrameInput, FrameOutput), ConnectionError> {
-        create_frames_io(self.next_message_id(), self.pending_ids.clone()).await
+        let message_id = self.next_message_id();
+        let (sender, receiver) = mpsc::channel::<TFrameId>(self.buffer_size); //TODO should use bufer_size?
+        self.pending_ids.register(message_id, sender).await?;
+        let frame_output =
+            FrameOutput::new(message_id, self.sender.clone(), self.pending_ids.clone());
+        Ok((receiver, frame_output))
     }
 
     fn next_message_id(&self) -> u32 {

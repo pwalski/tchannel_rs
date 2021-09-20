@@ -1,8 +1,6 @@
+use log::{error, info};
 use std::ops::AddAssign;
 use std::time::Duration;
-
-use log::{debug, error, info};
-
 use tchannel_protocol::handler::RequestHandler;
 use tchannel_protocol::handler::Response;
 use tchannel_protocol::messages::raw::RawMessage;
@@ -25,6 +23,7 @@ pub async fn main() -> Result<(), Error> {
 async fn run() -> Result<(), Error> {
     let mut tchannel = TChannel::new(Config::default())?;
     let subchannel = tchannel.subchannel("server".to_owned()).await?;
+    subchannel.register("pong", PongHandler::default()).await?;
     tchannel.start_server()?;
     loop {
         std::thread::sleep(Duration::from_secs(1))

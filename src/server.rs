@@ -6,18 +6,16 @@ use crate::fragmentation::ResponseFragmenter;
 use crate::frames::headers::InitHeaderKey;
 use crate::frames::payloads::Init;
 use crate::frames::payloads::{Codec, ErrorMsg, PROTOCOL_VERSION};
-use crate::frames::{TFrame, TFrameId, TFrameIdCodec, TFrameStream, Type};
+use crate::frames::{TFrame, TFrameId, TFrameIdCodec, Type};
 use crate::SubChannel;
-use bytes::BytesMut;
+use futures::SinkExt;
 use futures::{self, Future};
 use futures::{future, StreamExt};
-use futures::{SinkExt, Stream};
 use log::{debug, trace};
 use std::array::IntoIter;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::iter::FromIterator;
-use std::pin::Pin;
 use std::sync::Arc;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::{TcpListener, TcpStream};
@@ -73,8 +71,8 @@ impl Server {
         self.handle_init_handshake(&mut framed_read, &mut framed_write)
             .await?;
 
-        let (sender, receiver) = mpsc::channel::<TFrameId>(10);
-        FrameSender::spawn(framed_write, receiver, 100);
+        let (sender, receiver) = mpsc::channel::<TFrameId>(self.buffer_size);
+        FrameSender::spawn(framed_write, receiver, self.buffer_size); //TODO should use same value?
 
         framed_read
             .filter_map(Self::skip_if_err)
@@ -189,23 +187,6 @@ impl Server {
         .await)
     }
 
-    async fn send_frames(
-        &self,
-        frames: Vec<TFrameId>,
-        mut framed_write: FramedWrite<OwnedWriteHalf, TFrameIdCodec>,
-    ) {
-        for frame in frames {
-            debug!("Writing frame (id: {})", frame.id());
-            if let Err(err) = framed_write.send(frame).await {
-                error!("Failed to write frame: {}", err);
-            }
-        }
-        debug!("Flushing frames");
-        if let Err(err) = framed_write.flush().await {
-            error!("Failed to flush frames: {}", err);
-        }
-    }
-
     fn skip_if_err<T: Debug, Err: Debug>(
         result: Result<T, Err>,
     ) -> impl Future<Output = Option<T>> {
@@ -218,13 +199,6 @@ impl Server {
                 error!("Failure: {:?}", err);
                 future::ready(None)
             }
-        }
-    }
-
-    //TODO ugly. async for sake of Stream#for_each.
-    async fn log_if_err(res: Result<(), TChannelError>) {
-        if let Some(err) = res.err() {
-            error!("Request handling failure: {:?}", err);
         }
     }
 

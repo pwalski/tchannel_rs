@@ -7,7 +7,7 @@ use crate::frames::payloads::{Codec, PROTOCOL_VERSION};
 use crate::frames::{TFrame, TFrameId, Type};
 use async_trait::async_trait;
 use bb8::{ErrorSink, Pool, PooledConnection, RunError};
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use log::{debug, error};
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -41,6 +41,7 @@ impl ConnectionPools {
         &self,
         addr: SocketAddr,
     ) -> Result<Arc<Pool<ConnectionManager>>, RunError<ConnectionError>> {
+        debug!("Creating connection pool for '{}'", addr);
         let mut pools = self.pools.write().await;
         if let Some(pool) = pools.get(&addr) {
             return Ok(pool.clone());
@@ -131,11 +132,10 @@ async fn verify(connection: Connection) -> Result<Connection, ConnectionError> {
 }
 
 async fn init_handshake(connection: &Connection) -> Result<TFrameId, ConnectionError> {
-    let mut bytes = BytesMut::new();
-    //TODO add proper `crate::frames::headers::InitHeaderKey` headers
+    debug!("Init handshake.");
     let init = Init::default();
-    init.encode(&mut bytes)?;
-    let init_frame = TFrame::new(Type::InitRequest, bytes.freeze());
+    //TODO add proper `crate::frames::headers::InitHeaderKey` headers
+    let init_frame = TFrame::new(Type::InitRequest, init.encode_bytes()?);
     connection.send_one(init_frame).await
 }
 

@@ -3,7 +3,6 @@ use crate::frames::headers::ArgSchemeValue;
 use crate::handler::Response;
 use bytes::Bytes;
 use futures::Future;
-use num_traits::FromPrimitive;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
 use std::net::SocketAddr;

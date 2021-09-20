@@ -1,8 +1,3 @@
-use std::collections::{HashMap, VecDeque};
-
-use bytes::Buf;
-use bytes::Bytes;
-
 use crate::errors::TChannelError;
 use crate::fragmentation::FragmentationStatus::{CompleteAtTheEnd, Incomplete};
 use crate::frames::headers::TransportHeaderKey::CallerName;
@@ -14,6 +9,9 @@ use crate::frames::payloads::{
 };
 use crate::frames::{TFrame, TFrameStream, Type, FRAME_HEADER_LENGTH, FRAME_MAX_LENGTH};
 use crate::messages::{MessageArgs, ResponseCode};
+use bytes::Buf;
+use bytes::Bytes;
+use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug)]
 pub struct ResponseFragmenter {
@@ -36,7 +34,7 @@ impl ResponseFragmenter {
     pub fn create_frames(self) -> Result<TFrameStream, TChannelError> {
         let fields = self.create_fields();
         self.fragmenter
-            .create_frames(fields, Type::CallRequest, Type::CallRequestContinue)
+            .create_frames(fields, Type::CallResponse, Type::CallResponseContinue)
     }
 
     fn create_fields(&self) -> CallResponseFields {
@@ -306,8 +304,11 @@ mod tests {
         // arg3 will take remaining space of 2nd frame and part of 3rd frame
         let arg3 = Bytes::from(vec![b'c'; (u16::MAX) as usize]);
         let fragmenter = RequestFragmenter::new(
-            MessageArgs::new(SERVICE_NAME.to_string(), ARG_SCHEME),
-            [arg1.clone(), arg2.clone(), arg3.clone()].into(),
+            SERVICE_NAME.to_string(),
+            MessageArgs::new(
+                ARG_SCHEME,
+                [arg1.clone(), arg2.clone(), arg3.clone()].into(),
+            ),
         );
 
         // When
