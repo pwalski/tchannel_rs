@@ -23,11 +23,15 @@ Features of TChannel protocol implemented so far:
     * [ ] JSON
     * [ ] HTTP
     * [x] Raw
+ * [ ] Routing mesh
+ * [ ] Tracing
 
-Additional nonfunctional TODOs:
+Other TODOs:
 
  * [ ] Proper tests (right now only few happy paths)
- * [ ] Investigate WASI support
+ * [ ] Request response TTL
+ * [ ] Cancel request
+ * [ ] Claim requests
 
 ### Examples
 ```rust

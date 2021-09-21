@@ -19,13 +19,15 @@
 //!     * [ ] JSON
 //!     * [ ] HTTP
 //!     * [x] Raw
+//!  * [ ] Routing mesh
+//!  * [ ] Tracing
 //!
-//! Additional nonfunctional TODOs:
+//! Other TODOs:
 //!
 //!  * [ ] Proper tests (right now only few happy paths)
-//!  * [ ] Investigate WASI support
 //!  * [ ] Request response TTL
-//!  * [ ] Canceling request
+//!  * [ ] Cancel request
+//!  * [ ] Claim requests
 //!
 //! ## Examples
 //! ```
