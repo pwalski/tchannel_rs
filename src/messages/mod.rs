@@ -5,7 +5,7 @@ use bytes::Bytes;
 use futures::Future;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
-use std::net::SocketAddr;
+use std::net::ToSocketAddrs;
 use std::pin::Pin;
 
 pub mod raw;
@@ -25,10 +25,10 @@ pub trait MessageChannel {
     type REQ: Message;
     type RES: Message;
 
-    fn send(
-        &self,
+    fn send<'a, ADDR: ToSocketAddrs + Send + 'a>(
+        &'a self,
         request: Self::REQ,
-        host: SocketAddr,
+        host: ADDR,
     ) -> Pin<Box<dyn Future<Output = Response<Self::RES>> + Send + '_>>;
 }
 

@@ -15,7 +15,7 @@ use futures::StreamExt;
 use futures::{future, TryStreamExt};
 use log::{debug, error};
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
@@ -30,12 +30,43 @@ pub struct SubChannel {
 }
 
 impl SubChannel {
+    pub(super) async fn send<REQ: Message, RES: Message, ADDR: ToSocketAddrs>(
+        &self,
+        request: REQ,
+        host: ADDR,
+    ) -> Result<RES, HandlerError<RES>> {
+        match self.send_internal(request, host).await {
+            Ok((code, response)) => match code {
+                ResponseCode::Ok => Ok(response),
+                ResponseCode::Error => Err(HandlerError::MessageError(response)),
+            },
+            Err(err) => Err(HandlerError::TChannelError(err)),
+        }
+    }
+
+    pub(super) async fn send_internal<REQ: Message, RES: Message, ADDR: ToSocketAddrs>(
+        &self,
+        request: REQ,
+        host: ADDR,
+    ) -> Result<(ResponseCode, RES), TChannelError> {
+        let host = first_addr(host)?;
+        let (connection_res, frames_res) =
+            join!(self.connect(host), self.create_frames(request.try_into()?));
+        let (frames_in, frames_out) = connection_res?;
+        send_frames(frames_res?, &frames_out).await?;
+        let response = ResponseDefragmenter::new(frames_in)
+            .read_response_msg()
+            .await;
+        frames_out.close().await; //TODO ugly
+        response
+    }
+
     /// Register request handler.
     pub async fn register<S: AsRef<str>, REQ, RES, HANDLER>(
         &self,
         endpoint: S,
         request_handler: HANDLER,
-    ) -> Result<(), HandlerError>
+    ) -> Result<(), TChannelError>
     where
         REQ: Message + 'static,
         RES: Message + 'static,
@@ -51,7 +82,7 @@ impl SubChannel {
         &self,
         endpoint: S,
         request_handler: HANDLER,
-    ) -> Result<(), HandlerError>
+    ) -> Result<(), TChannelError>
     where
         REQ: Message + 'static,
         RES: Message + 'static,
@@ -62,48 +93,32 @@ impl SubChannel {
             .await
     }
 
-    async fn register_handler<S: AsRef<str>>(
-        &self,
-        endpoint: S,
-        request_handler: HandlerRef,
-    ) -> Result<(), HandlerError> {
-        let mut handlers = self.handlers.write().await;
-        if handlers.contains_key(endpoint.as_ref()) {
-            return Err(HandlerError::RegistrationError(format!(
-                "Handler already registered for '{}'",
-                endpoint.as_ref()
-            )));
-        }
-        handlers.insert(endpoint.as_ref().to_string(), request_handler);
-        Ok(()) //TODO return &mut of nested handler?
-    }
-
     /// Unregister request handler.
-    pub async fn unregister<S: AsRef<str>>(&mut self, endpoint: S) -> Result<(), HandlerError> {
+    pub async fn unregister<S: AsRef<str>>(&mut self, endpoint: S) -> Result<(), TChannelError> {
         let mut handlers = self.handlers.write().await;
         match handlers.remove(endpoint.as_ref()) {
             Some(_) => Ok(()),
-            None => Err(HandlerError::RegistrationError(format!(
+            None => Err(TChannelError::Error(format!(
                 "Handler '{}' is missing.",
                 endpoint.as_ref()
             ))),
         }
     }
 
-    pub(super) async fn send<REQ: Message, RES: Message>(
+    async fn register_handler<S: AsRef<str>>(
         &self,
-        request: REQ,
-        host: SocketAddr,
-    ) -> Result<(ResponseCode, RES), crate::errors::TChannelError> {
-        let (connection_res, frames_res) =
-            join!(self.connect(host), self.create_frames(request.try_into()?));
-        let (frames_in, frames_out) = connection_res?;
-        send_frames(frames_res?, &frames_out).await?;
-        let response = ResponseDefragmenter::new(frames_in)
-            .read_response_msg()
-            .await;
-        frames_out.close().await; //TODO ugly
-        response
+        endpoint: S,
+        request_handler: HandlerRef,
+    ) -> Result<(), TChannelError> {
+        let mut handlers = self.handlers.write().await;
+        if handlers.contains_key(endpoint.as_ref()) {
+            return Err(TChannelError::Error(format!(
+                "Handler already registered for '{}'",
+                endpoint.as_ref()
+            )));
+        }
+        handlers.insert(endpoint.as_ref().to_string(), request_handler);
+        Ok(()) //TODO return &mut of nested handler?
     }
 
     async fn connect(&self, host: SocketAddr) -> Result<(FrameInput, FrameOutput), TChannelError> {
@@ -143,6 +158,16 @@ impl SubChannel {
             None => Err(CodecError::Error("Missing arg1/endpoint name".to_string())),
         }
     }
+}
+
+fn first_addr<ADDR: ToSocketAddrs>(addr: ADDR) -> Result<SocketAddr, ConnectionError> {
+    let mut addrs = addr.to_socket_addrs()?;
+    if let Some(addr) = addrs.next() {
+        return Ok(addr);
+    }
+    Err(ConnectionError::Error(
+        "Unable to get host addr".to_string(),
+    ))
 }
 
 async fn send_frames(

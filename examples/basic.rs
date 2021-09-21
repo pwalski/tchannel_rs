@@ -1,36 +1,3 @@
-[![build status](https://github.com/pwalski/tchannel-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/pwalski/tchannel-rust/actions)
-
-# tchannel_protocol
-
-TChannel is a network multiplexing and framing RPC protocol created by Uber ([protocol specs](https://github.com/uber/tchannel/blob/master/docs/protocol.md)).
-
-#### Disclaimer
-
-The project serves as an excuse to learn Rust therefore the implementation may be suboptimal and features are not tested properly.
-
-### Overview
-
-Features of TChannel protocol implemented so far:
-
- * [x] A request/response model,
- * [x] Multiplexing multiple requests across the same TCP socket,
- * [x] Out-of-order responses,
- * [ ] Streaming requests and responses,
- * [ ] Checksums of frame args (only None),
- * [ ] Transport of arbitrary payloads:
-    * [ ] Thrift
-    * [ ] SThrift (streaming Thrift)
-    * [ ] JSON
-    * [ ] HTTP
-    * [x] Raw
-
-Additional nonfunctional TODOs:
-
- * [ ] Proper tests (right now only few happy paths)
- * [ ] Investigate WASI support
-
-### Examples
-```rust
 use tchannel_protocol::errors::TChannelError;
 use tchannel_protocol::handler::{RequestHandler, Response};
 use tchannel_protocol::messages::raw::RawMessage;
@@ -74,34 +41,3 @@ impl RequestHandler for Handler {
         Ok(RawMessage::new("x".into(), req_header, "y".into()))
     }
 }
-```
-
-
-## Build
-
-Update of README
-```shell
-cargo install cargo-readme
-cargo readme > README.md
-```
-
-## Examples Subproject
-
-Sample server:
-```shell
-RUST_LOG=DEBUG cargo run --example server
-```
-
-Sample `tchannel-java` server:
-```shell
-mvn -f examples-server package exec:exec -Pserver
-```
-
-Sample client:
-```shell
-RUST_LOG=DEBUG cargo run --example client
-```
-
----
-
-License: MIT OR Apache-2.0

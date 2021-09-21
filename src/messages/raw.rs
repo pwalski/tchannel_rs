@@ -7,7 +7,7 @@ use bytes::{Buf, Bytes};
 use futures::Future;
 use std::collections::VecDeque;
 use std::convert::{TryFrom, TryInto};
-use std::net::SocketAddr;
+use std::net::ToSocketAddrs;
 use std::pin::Pin;
 use std::string::FromUtf8Error;
 
@@ -75,10 +75,10 @@ impl MessageChannel for SubChannel {
     type REQ = RawMessage;
     type RES = RawMessage;
 
-    fn send(
-        &self,
+    fn send<'a, ADDR: ToSocketAddrs + Send + 'a>(
+        &'a self,
         request: Self::REQ,
-        host: SocketAddr,
+        host: ADDR,
     ) -> Pin<Box<dyn Future<Output = Response<Self::RES>> + Send + '_>> {
         Box::pin(self.send(request, host))
     }

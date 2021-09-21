@@ -1,6 +1,4 @@
 use log::{error, info};
-use std::net::SocketAddr;
-use std::str::FromStr;
 use tchannel_protocol::messages::raw::RawMessage;
 use tchannel_protocol::messages::MessageChannel;
 use tchannel_protocol::Config;
@@ -24,8 +22,7 @@ async fn run() -> Result<(), Error> {
     info!("Sending 3 requests");
     for _ in 0..3 {
         let request = RawMessage::new("pong".into(), "Marco".into(), "Ping!".into());
-        let addr = SocketAddr::from_str("127.0.0.1:8888")?;
-        match subchannel.send(request, addr).await {
+        match subchannel.send(request, "127.0.0.1:8888").await {
             Ok(response) => info!("Response: {:?}", response),
             Err(error) => info!("Fail: {:?}", error),
         }

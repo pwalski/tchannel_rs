@@ -1,11 +1,11 @@
-use crate::errors::TChannelError;
+use crate::errors::{HandlerError, TChannelError};
 use crate::messages::ResponseCode;
 use crate::messages::{Message, MessageArgs, MessageArgsResponse};
 use futures::{future, Future};
 use std::fmt::Debug;
 use std::pin::Pin;
 
-pub type Response<RES> = Result<(ResponseCode, RES), TChannelError>;
+pub type Response<RES> = Result<RES, HandlerError<RES>>;
 
 /// Trait for handling requests asynchronously.
 ///
@@ -51,9 +51,7 @@ impl<REQ: Message, RES: Message, HANDLER: RequestHandlerAsync<REQ = REQ, RES = R
     ) -> Pin<Box<dyn Future<Output = MessageArgsResponse> + Send + '_>> {
         Box::pin(async move {
             let request = REQ::try_from(request_args)?;
-            let (code, message) = self.0.handle(request).await?;
-            let message_args: MessageArgs = message.try_into()?;
-            Ok((code, message_args))
+            convert(self.0.handle(request).await)
         })
     }
 }
@@ -70,9 +68,18 @@ impl<REQ: Message, RES: Message, HANDLER: RequestHandler<REQ = REQ, RES = RES>>
 {
     pub fn handle(&mut self, request_args: MessageArgs) -> MessageArgsResponse {
         let request = REQ::try_from(request_args)?;
-        let (code, message) = self.0.handle(request)?;
-        let message_args: MessageArgs = message.try_into()?;
-        Ok((code, message_args))
+        convert(self.0.handle(request))
+    }
+}
+
+fn convert<MSG: Message>(msg_res: Result<MSG, HandlerError<MSG>>) -> MessageArgsResponse {
+    match msg_res {
+        Ok(message) => Ok((ResponseCode::Ok, message.try_into()?)),
+        Err(err) => match err {
+            HandlerError::MessageError(message) => Ok((ResponseCode::Ok, message.try_into()?)),
+            HandlerError::GeneralError(message) => Err(TChannelError::Error(message)),
+            HandlerError::TChannelError(err) => Err(err),
+        },
     }
 }
 

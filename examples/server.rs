@@ -1,10 +1,10 @@
 use log::{error, info};
 use std::ops::AddAssign;
 use std::time::Duration;
+use tchannel_protocol::errors::HandlerError;
 use tchannel_protocol::handler::RequestHandler;
 use tchannel_protocol::handler::Response;
 use tchannel_protocol::messages::raw::RawMessage;
-use tchannel_protocol::messages::ResponseCode;
 use tchannel_protocol::Config;
 use tchannel_protocol::TChannel;
 
@@ -42,11 +42,17 @@ impl RequestHandler for PongHandler {
     fn handle(&mut self, request: Self::REQ) -> Response<Self::RES> {
         info!("Received {:?}", request);
         self.counter.add_assign(1);
-        let response = match self.counter {
-            1 => RawMessage::new("pong".into(), "Polo".into(), "Pong!".into()),
-            2 => RawMessage::new("pong".into(), "Polo".into(), "I feel bad ...".into()),
-            _ => RawMessage::new("pong".into(), "Polo".into(), "I feel sick ...".into()),
-        };
-        Ok((ResponseCode::Ok, response))
+        if request.header() != "Marco" {
+            return Err(HandlerError::GeneralError("Bad header".into()));
+        }
+        match self.counter {
+            1 => Ok(msg("Pong!".into())),
+            2 => Ok(msg("I feel bad ...".into())),
+            _ => Err(HandlerError::MessageError(msg("I feel sick ...".into()))),
+        }
     }
+}
+
+fn msg(msg: String) -> RawMessage {
+    RawMessage::new("pong".into(), "Polo".into(), msg.into())
 }

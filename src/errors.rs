@@ -1,5 +1,6 @@
 use crate::frames::payloads::{ErrorCode, ErrorMsg, Tracing};
 use crate::frames::{TFrameId, Type};
+use crate::messages::Message;
 use bb8::RunError;
 use std::fmt::{Display, Formatter};
 use std::string::FromUtf8Error;
@@ -21,9 +22,6 @@ pub enum TChannelError {
 
     #[error(transparent)]
     ConnectionPoolError(#[from] RunError<ConnectionError>),
-
-    #[error(transparent)]
-    HandlerError(#[from] HandlerError),
 }
 
 /// Frame encoding error.
@@ -72,13 +70,17 @@ pub enum ConnectionError {
 
 /// Request handler Error
 #[derive(Error, Debug, PartialEq)]
-pub enum HandlerError {
-    /// Represents general error.
-    #[error("Handler error: {0}")]
-    Error(String),
+pub enum HandlerError<RES: Message> {
+    #[error(transparent)]
+    TChannelError(#[from] TChannelError),
 
+    /// A general error.
+    #[error("Handler error: {0}")]
+    GeneralError(String),
+
+    /// A message response with error code.
     #[error("Handler registration error: {0}")]
-    RegistrationError(String),
+    MessageError(RES),
 }
 
 #[derive(Error, Debug)]
