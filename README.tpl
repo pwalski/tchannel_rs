@@ -14,14 +14,19 @@ cargo readme > README.md
 
 ## Examples Subproject
 
+Sample server:
+```shell
+RUST_LOG=DEBUG cargo run --example server
+```
+
 Sample `tchannel-java` server:
 ```shell
 mvn -f examples-server package exec:exec -Pserver
 ```
 
-Basic client scenario:
+Sample client:
 ```shell
-RUST_LOG=DEBUG cargo run --example basic
+RUST_LOG=DEBUG cargo run --example client
 ```
 
 ---

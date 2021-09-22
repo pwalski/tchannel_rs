@@ -1,32 +1,47 @@
 use crate::errors::{CodecError, TChannelError};
 use crate::frames::headers::ArgSchemeValue;
-use crate::frames::payloads::ResponseCode;
-use async_trait::async_trait;
+use crate::handler::Response;
 use bytes::Bytes;
-use std::convert::TryFrom;
+use futures::Future;
+use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
-use std::net::SocketAddr;
+use std::net::ToSocketAddrs;
+use std::pin::Pin;
 
 pub mod raw;
 pub mod thrift;
 
-pub trait Message: Debug + Sized + Send {
+pub trait Message:
+    Debug
+    + Sized
+    + Send
+    + TryFrom<MessageArgs, Error = CodecError>
+    + TryInto<MessageArgs, Error = CodecError>
+{
     fn args_scheme() -> ArgSchemeValue;
-    fn to_args(self) -> Vec<Bytes>;
 }
 
-pub trait Request: Message {}
-
-pub trait Response: Message + TryFrom<Vec<Bytes>, Error = CodecError> {}
-
-#[async_trait]
 pub trait MessageChannel {
-    type REQ: Request;
-    type RES: Response;
+    type REQ: Message;
+    type RES: Message;
 
-    async fn send(
-        &self,
+    fn send<'a, ADDR: ToSocketAddrs + Send + 'a>(
+        &'a self,
         request: Self::REQ,
-        host: SocketAddr,
-    ) -> Result<(ResponseCode, Self::RES), TChannelError>;
+        host: ADDR,
+    ) -> Pin<Box<dyn Future<Output = Response<Self::RES>> + Send + '_>>;
+}
+
+#[derive(Debug, new)]
+pub struct MessageArgs {
+    pub arg_scheme: ArgSchemeValue,
+    pub args: Vec<Bytes>,
+}
+
+pub(crate) type MessageArgsResponse = Result<(ResponseCode, MessageArgs), TChannelError>;
+
+#[derive(Copy, Clone, Debug, PartialEq, FromPrimitive, ToPrimitive)]
+pub enum ResponseCode {
+    Ok = 0x00,
+    Error = 0x01,
 }

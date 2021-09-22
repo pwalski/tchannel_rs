@@ -91,7 +91,7 @@ public final class AsyncRequest {
 
         // create TChannel
         TChannel tchannel = new TChannel.Builder("examples-server")
-            .setServerHost(InetAddress.getByName(null))
+            .setServerHost(InetAddress.getByAddress(new byte[] {127,0,0,1}))
             .setServerPort(8888)
             .build();
 

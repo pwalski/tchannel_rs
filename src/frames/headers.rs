@@ -29,7 +29,7 @@ pub enum TransportHeaderKey {
     ShardKey,
 }
 
-#[derive(ToString, Debug, EnumString)]
+#[derive(ToString, Debug, EnumString, PartialEq, Eq)]
 pub enum ArgSchemeValue {
     #[strum(serialize = "raw")]
     Raw,
@@ -45,9 +45,13 @@ pub enum ArgSchemeValue {
     #[allow(dead_code)]
     #[strum(serialize = "sthrift")]
     StreamingThrift,
+    //TODO how to handle it?
+    #[allow(dead_code)]
+    #[strum(disabled)]
+    Custom(String),
 }
 
-#[derive(ToString, Debug)]
+#[derive(ToString, Debug, PartialEq, Eq)]
 pub enum RetryFlagValue {
     #[allow(dead_code)]
     #[strum(serialize = "n")]
@@ -58,4 +62,23 @@ pub enum RetryFlagValue {
     #[allow(dead_code)]
     #[strum(serialize = "t")]
     RetryOnTimeout,
+}
+
+#[derive(ToString, Debug, EnumString, PartialEq, Eq)]
+pub enum InitHeaderKey {
+    #[allow(dead_code)]
+    #[strum(serialize = "host_port")]
+    HostPort,
+    #[allow(dead_code)]
+    #[strum(serialize = "process_name")]
+    ProcessName,
+    #[allow(dead_code)]
+    #[strum(serialize = "tchannel_language")]
+    TChannelLanguage,
+    #[allow(dead_code)]
+    #[strum(serialize = "tchannel_language_version")]
+    TChannelLanguageVersion,
+    #[allow(dead_code)]
+    #[strum(serialize = "tchannel_version")]
+    TChannelVersion,
 }

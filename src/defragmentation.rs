@@ -1,112 +1,211 @@
+use std::collections::VecDeque;
+use std::str::FromStr;
+
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+
 use crate::connection::FrameInput;
 use crate::errors::{CodecError, TChannelError};
-use crate::frames::headers::TransportHeaderKey;
+use crate::frames::headers::{ArgSchemeValue, TransportHeaderKey};
 use crate::frames::payloads::{
-    CallArgs, CallContinue, CallResponse, ChecksumType, Codec, Flags, ResponseCode,
+    Call, CallArgs, CallContinue, CallFields, CallRequest, CallRequestFields, CallResponse,
+    CallResponseFields, ChecksumType, Codec, Flags,
 };
 use crate::frames::Type;
-use crate::messages::Response;
-use bytes::{Buf, BufMut, Bytes, BytesMut};
-use std::collections::{HashMap, VecDeque};
-use std::marker::PhantomData;
+use crate::messages::{Message, MessageArgs, ResponseCode};
+
+#[derive(Debug)]
+pub struct ResponseDefragmenter {
+    defragmenter: Defragmenter,
+}
+
+impl ResponseDefragmenter {
+    pub fn new(frame_input: FrameInput) -> ResponseDefragmenter {
+        let defragmenter = Defragmenter::new(frame_input);
+        ResponseDefragmenter { defragmenter }
+    }
+
+    #[allow(dead_code)]
+    pub async fn read_response(self) -> Result<(CallResponseFields, MessageArgs), TChannelError> {
+        self.defragmenter
+            .read(Type::CallResponse, CallResponse::decode)
+            .await
+    }
+
+    pub async fn read_response_msg<MSG: Message>(
+        self,
+    ) -> Result<(ResponseCode, MSG), TChannelError> {
+        let (fields, message_args) = self
+            .defragmenter
+            .read_and_check(Type::CallResponse, CallResponse::decode, |fields| {
+                ArgSchemeChecker::new(MSG::args_scheme()).check_args_scheme(fields)
+            })
+            .await?;
+        let msg = MSG::try_from(message_args)?;
+        Ok((fields.code, msg))
+    }
+}
+
+#[derive(Debug)]
+pub struct RequestDefragmenter {
+    defragmenter: Defragmenter,
+}
+
+impl RequestDefragmenter {
+    pub fn new(frame_input: FrameInput) -> RequestDefragmenter {
+        let defragmenter = Defragmenter::new(frame_input);
+        RequestDefragmenter { defragmenter }
+    }
+
+    pub async fn read_request(self) -> Result<(CallRequestFields, MessageArgs), TChannelError> {
+        self.defragmenter
+            .read(Type::CallRequest, CallRequest::decode)
+            .await
+    }
+
+    #[allow(dead_code)]
+    pub async fn read_request_msg<MSG: Message>(self) -> Result<MSG, TChannelError> {
+        let _checker = ArgSchemeChecker {
+            arg_scheme: MSG::args_scheme(),
+        };
+        let (_, message_args) = self
+            .defragmenter
+            .read_and_check(Type::CallRequest, CallRequest::decode, |fields| {
+                ArgSchemeChecker::new(MSG::args_scheme()).check_args_scheme(fields)
+            })
+            .await?;
+        Ok(MSG::try_from(message_args)?)
+    }
+}
 
 #[derive(Debug, new)]
-pub struct Defragmenter<RES: Response> {
+pub struct Defragmenter {
     frame_input: FrameInput,
-    #[new(default)]
-    resource_type: PhantomData<RES>,
 }
 
-impl<RES: Response> Defragmenter<RES> {
-    pub async fn read_response(mut self) -> Result<(ResponseCode, RES), TChannelError> {
+impl Defragmenter {
+    async fn read<FIELDS: CallFields, FRAME: Codec + Call<FIELDS>>(
+        self,
+        frame_type: Type,
+        decoder: fn(src: &mut Bytes) -> Result<FRAME, CodecError>,
+    ) -> Result<(FIELDS, MessageArgs), TChannelError> {
+        self.read_and_check(frame_type, decoder, get_args_scheme)
+            .await
+    }
+
+    async fn read_and_check<FIELDS: CallFields, FRAME: Codec + Call<FIELDS>>(
+        mut self,
+        frame_type: Type,
+        decode: fn(src: &mut Bytes) -> Result<FRAME, CodecError>,
+        check_fields: fn(fields: &FIELDS) -> Result<ArgSchemeValue, CodecError>,
+    ) -> Result<(FIELDS, MessageArgs), TChannelError> {
         let mut args_defragmenter = ArgsDefragmenter::default();
-        let (code, flags) = self.read_response_begin(&mut args_defragmenter).await?;
+        let (fields, flags) = self
+            .read_beginning(frame_type, decode, &mut args_defragmenter)
+            .await?;
+        let args_scheme = check_fields(&fields)?;
         if !flags.contains(Flags::MORE_FRAGMENTS_FOLLOW) {
-            return Ok((code, RES::try_from(args_defragmenter.args())?));
+            let message_args = MessageArgs::new(args_scheme, args_defragmenter.args());
+            return Ok((fields, message_args));
         }
-        self.read_response_continue(&mut args_defragmenter).await?;
-        let response = RES::try_from(args_defragmenter.args())?;
-        Ok((code, response))
+        read_continuation(&mut self.frame_input, &mut args_defragmenter).await?;
+        let message_args = MessageArgs::new(args_scheme, args_defragmenter.args());
+        Ok((fields, message_args))
     }
 
-    async fn read_response_begin(
+    async fn read_beginning<FIELDS: CallFields, FRAME: Codec + Call<FIELDS>>(
         &mut self,
+        frame_type: Type,
+        decoder: fn(src: &mut Bytes) -> Result<FRAME, CodecError>,
         args_defragmenter: &mut ArgsDefragmenter,
-    ) -> Result<(ResponseCode, Flags), TChannelError> {
+    ) -> Result<(FIELDS, Flags), TChannelError> {
         if let Some(frame_id) = self.frame_input.recv().await {
-            debug!("Received response id: {}", frame_id.id());
             let mut frame = frame_id.frame;
-            if *frame.frame_type() != Type::CallResponse {
-                return Err(CodecError::Error(format!(
+            if frame_type == frame.frame_type {
+                let mut frame = decoder(frame.payload_mut())?; //ugh
+                verify_args(frame.args()).map(|args| args_defragmenter.add(args))?;
+                let flags = frame.flags();
+                Ok((frame.fields(), flags))
+            } else {
+                Err(TChannelError::Error(format!(
                     "Expected '{:?}' got '{:?}'",
-                    Type::CallResponse,
+                    frame_type,
                     frame.frame_type()
-                ))
-                .into());
+                )))
             }
-            let response = CallResponse::decode(frame.payload_mut())?;
-            self.verify_headers(response.fields().headers())?;
-            verify_args(response.args).map(|args| args_defragmenter.add(args))?;
-            Ok((response.fields.code, response.flags))
         } else {
-            Err(TChannelError::Error("Got no response".to_owned()))
+            Err(TChannelError::Error("Received no response".to_string()))
         }
     }
+}
 
-    async fn read_response_continue(
-        &mut self,
-        args_defragmenter: &mut ArgsDefragmenter,
-    ) -> Result<(), TChannelError> {
-        while let Some(frame_id) = self.frame_input.recv().await {
-            let mut frame = frame_id.frame;
-            match frame.frame_type() {
-                Type::CallResponseContinue => {
-                    let continuation = CallContinue::decode(frame.payload_mut())?;
-                    let more_follows = continuation.flags().contains(Flags::MORE_FRAGMENTS_FOLLOW); //TODO workaround for borrow checker
-                    verify_args(continuation.args).map(|args| args_defragmenter.add(args))?;
-                    if more_follows {
-                        break;
-                    }
-                }
-                Type::Error => {
-                    debug!("Transport error: {:?}", frame);
-                    return Err(TChannelError::Error(format!(
-                        "Transport error: {:?}",
-                        frame
-                    )));
-                }
-                frame_type => {
-                    debug!("Unexpected frame: {:?}", frame);
-                    return Err(TChannelError::Error(format!(
-                        "Unexpected frame: {:?}",
-                        frame_type
-                    )));
-                }
-            };
+#[derive(Debug, new)]
+struct ArgSchemeChecker {
+    arg_scheme: ArgSchemeValue,
+}
+
+impl ArgSchemeChecker {
+    fn check_args_scheme<FIELDS: CallFields>(
+        &self,
+        fields: &FIELDS,
+    ) -> Result<ArgSchemeValue, CodecError> {
+        let arg_scheme = get_args_scheme(fields)?;
+        if arg_scheme != self.arg_scheme {
+            return Err(CodecError::Error(format!(
+                "Expected {} got {}",
+                self.arg_scheme.to_string(),
+                arg_scheme.to_string()
+            )));
         }
-        Ok(())
+        Ok(arg_scheme)
     }
+}
 
-    fn verify_headers(&self, headers: &HashMap<String, String>) -> Result<(), TChannelError> {
-        if let Some(scheme) = headers.get(TransportHeaderKey::ArgScheme.to_string().as_str()) {
-            //TODO ugly
-            if !scheme.eq(RES::args_scheme().to_string().as_str()) {
+fn get_args_scheme<FIELDS: CallFields>(fields: &FIELDS) -> Result<ArgSchemeValue, CodecError> {
+    let headers = fields.headers();
+    if let Some(scheme) = headers.get(TransportHeaderKey::ArgScheme.to_string().as_str()) {
+        Ok(ArgSchemeValue::from_str(scheme)?)
+    } else {
+        Err(CodecError::Error("Missing arg schema arg".to_owned()))
+    }
+}
+
+async fn read_continuation(
+    frame_input: &mut FrameInput,
+    args_defragmenter: &mut ArgsDefragmenter,
+) -> Result<(), TChannelError> {
+    while let Some(frame_id) = frame_input.recv().await {
+        let mut frame = frame_id.frame;
+        match frame.frame_type() {
+            Type::CallResponseContinue | Type::CallRequestContinue => {
+                let mut continuation = CallContinue::decode(frame.payload_mut())?;
+                let more_follows = continuation.flags().contains(Flags::MORE_FRAGMENTS_FOLLOW); //TODO workaround for borrow checker
+                verify_args(continuation.args_mut()).map(|args| args_defragmenter.add(args))?;
+                if more_follows {
+                    break;
+                }
+            }
+            Type::Error => {
+                debug!("Transport error: {:?}", frame);
                 return Err(TChannelError::Error(format!(
-                    "Expected arg scheme '{}' received '{}'",
-                    RES::args_scheme().to_string(),
-                    scheme
+                    "Transport error: {:?}",
+                    frame
                 )));
             }
-        } else {
-            return Err(TChannelError::Error("Missing arg schema arg".to_owned()));
-        }
-        Ok(())
+            frame_type => {
+                debug!("Unexpected frame: {:?}", frame);
+                return Err(TChannelError::Error(format!(
+                    "Unexpected frame: {:?}",
+                    frame_type
+                )));
+            }
+        };
     }
+    Ok(())
 }
 
-fn verify_args(call_args: CallArgs) -> Result<VecDeque<Option<Bytes>>, TChannelError> {
+fn verify_args(call_args: &mut CallArgs) -> Result<&mut VecDeque<Option<Bytes>>, CodecError> {
     match call_args.checksum_type() {
-        ChecksumType::None => Ok(call_args.args),
+        ChecksumType::None => Ok(call_args.args_mut()),
         _ => todo!(),
     }
 }
@@ -117,7 +216,7 @@ struct ArgsDefragmenter {
 }
 
 impl ArgsDefragmenter {
-    fn add(&mut self, mut frame_args: VecDeque<Option<Bytes>>) {
+    fn add(&mut self, frame_args: &mut VecDeque<Option<Bytes>>) {
         match frame_args.pop_front() {
             None => return,
             Some(frame_arg) => self.add_first_arg(frame_arg),
@@ -142,7 +241,7 @@ impl ArgsDefragmenter {
         }
     }
 
-    fn add_remaining_args(&mut self, frame_args: VecDeque<Option<Bytes>>) {
+    fn add_remaining_args(&mut self, frame_args: &mut VecDeque<Option<Bytes>>) {
         for frame_arg in frame_args {
             match frame_arg {
                 None => self.args.push(BytesMut::new()), // empty arg
@@ -163,7 +262,11 @@ impl ArgsDefragmenter {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::collections::HashMap;
+    use std::convert::TryInto;
+
+    use tokio_test::*;
+
     use crate::frames::headers::ArgSchemeValue;
     use crate::frames::headers::TransportHeaderKey::ArgScheme;
     use crate::frames::payloads::{
@@ -171,9 +274,8 @@ mod tests {
     };
     use crate::frames::{TFrame, TFrameId};
     use crate::messages::raw::RawMessage;
-    use crate::messages::Message;
 
-    use tokio_test::*;
+    use super::*;
 
     const SERVICE_NAME: &str = "test_service";
     const ARG_SCHEME: ArgSchemeValue = ArgSchemeValue::Raw;
@@ -199,9 +301,9 @@ mod tests {
         assert_ok!(send_result);
 
         // When
-        let defragmenter = Defragmenter::new(receiver);
+        let defragmenter = ResponseDefragmenter::new(receiver);
         let response_res: Result<(ResponseCode, RawMessage), TChannelError> =
-            block_on(defragmenter.read_response());
+            block_on(defragmenter.read_response_msg());
 
         // Then
         // assert_ok!(&response_res);
@@ -210,9 +312,11 @@ mod tests {
         assert_eq!("e".to_string(), *response.endpoint());
         assert_eq!("h".to_string(), *response.header());
         assert_eq!(Bytes::from("b"), *response.body());
+        let response_args: MessageArgs = response.try_into().unwrap();
+        assert_eq!(ARG_SCHEME, response_args.arg_scheme);
         assert_eq!(
             [Bytes::from("e"), Bytes::from("h"), Bytes::from("b")].to_vec(),
-            response.to_args()
+            response_args.args
         );
     }
 
@@ -234,17 +338,15 @@ mod tests {
         assert_ok!(send_result);
 
         // When
-        let defragmenter = Defragmenter::new(receiver);
+        let defragmenter = ResponseDefragmenter::new(receiver);
         let response_res: Result<(ResponseCode, RawMessage), TChannelError> =
-            block_on(defragmenter.read_response());
+            block_on(defragmenter.read_response_msg());
 
         // Then
         assert!(response_res.is_err());
         let res = response_res.err().unwrap();
         assert_eq!(
-            TChannelError::CodecError(CodecError::Error(
-                "Expected 'CallResponse' got 'CallRequest'".to_string()
-            )),
+            TChannelError::Error("Expected 'CallResponse' got 'CallRequest'".to_string()),
             res
         );
     }

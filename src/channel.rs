@@ -1,47 +1,83 @@
 use crate::connection::pool::{ConnectionPools, ConnectionPoolsBuilder};
-use crate::connection::{ConnectionOptions, FrameInput, FrameOutput};
-use crate::defragmentation::Defragmenter;
+use crate::connection::Config;
 use crate::errors::{ConnectionError, TChannelError};
-use crate::fragmentation::Fragmenter;
-use crate::frames::payloads::ResponseCode;
-use crate::frames::TFrameStream;
-use crate::messages::{Request, Response};
-use futures::join;
-use futures::StreamExt;
-use futures::{future, TryStreamExt};
-use log::{debug, error};
+use crate::server::Server;
+use crate::SubChannel;
+use log::debug;
+use std::cell::Cell;
 use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 
+pub(crate) type SharedSubChannels = Arc<RwLock<HashMap<String, Arc<SubChannel>>>>;
+// Mutex to be Sync, Cell to get owned type on Drop impl TChannel, Option for lazy initialization.
+type OptionalRuntime = Mutex<Cell<Option<Runtime>>>;
+
 pub struct TChannel {
-    subchannels: RwLock<HashMap<String, Arc<SubChannel>>>,
+    config: Arc<Config>,
     connection_pools: Arc<ConnectionPools>,
+    subchannels: SharedSubChannels,
+    server_runtime: OptionalRuntime,
 }
 
 impl TChannel {
-    pub fn new(connection_options: ConnectionOptions) -> Result<Self, TChannelError> {
+    /// Initializes TChannel.
+    pub fn new(config: Config) -> Result<Self, TChannelError> {
+        let config = Arc::new(config);
         let connection_pools = ConnectionPoolsBuilder::default()
-            .connection_options(connection_options)
+            .config(config.clone())
             .build()?;
+        let subchannels = Arc::new(RwLock::new(HashMap::new()));
         Ok(TChannel {
-            subchannels: RwLock::new(HashMap::new()),
+            config,
             connection_pools: Arc::new(connection_pools),
+            subchannels,
+            server_runtime: Mutex::new(Cell::new(None)),
         })
     }
 
+    /// Starts server
+    pub fn start_server(&mut self) -> Result<(), ConnectionError> {
+        let mut runtime_lock = self.server_runtime.lock().unwrap();
+        if runtime_lock.get_mut().is_none() {
+            debug!("Server runtime is alive"); //TODO lie
+            let runtime = tokio::runtime::Builder::new_multi_thread()
+                .enable_io()
+                .max_blocking_threads(self.config.max_server_threads)
+                .thread_name("tchannel_server")
+                .build()?;
+            runtime.spawn(Server::run(self.config.clone(), self.subchannels.clone()));
+            runtime_lock.set(Some(runtime));
+        }
+        Ok(())
+    }
+
+    pub fn shutdown_server(&self) {
+        let runtime_lock = self.server_runtime.lock().unwrap();
+        //TODO dirty workaround for ability to shutdown Runtime having only &self (Drop impl).
+        if let Some(runtime) = runtime_lock.replace(None) {
+            debug!("Stopping server");
+            runtime.shutdown_timeout(Duration::from_millis(100));
+            // runtime.shutdown_background();
+            debug!("Server stopped");
+        } else {
+            debug!("Server runtime stopped. Nothing to do.");
+        }
+    }
+
     pub async fn subchannel<STR: AsRef<str>>(
-        &mut self,
+        &self,
         service_name: STR,
     ) -> Result<Arc<SubChannel>, TChannelError> {
         if let Some(subchannel) = self.subchannels.read().await.get(service_name.as_ref()) {
             return Ok(subchannel.clone());
         }
-        self.make_subchannel(service_name).await
+        self.create_subchannel(service_name).await
     }
 
-    async fn make_subchannel<STR: AsRef<str>>(
+    async fn create_subchannel<STR: AsRef<str>>(
         &self,
         service_name: STR,
     ) -> Result<Arc<SubChannel>, TChannelError> {
@@ -61,60 +97,8 @@ impl TChannel {
     }
 }
 
-#[derive(Debug, new)]
-pub struct SubChannel {
-    service_name: String,
-    connection_pools: Arc<ConnectionPools>,
-    //TODO handle handlers
-    // #[builder(setter(skip))]
-    // handlers: HashMap<String, Box<RequestHandler>>,
-}
-
-impl SubChannel {
-    pub fn register<HANDLER>(&mut self, _handler_name: &str, _handler: HANDLER) -> &Self {
-        unimplemented!()
+impl Drop for TChannel {
+    fn drop(&mut self) {
+        self.shutdown_server();
     }
-
-    pub(super) async fn send<REQ: Request, RES: Response>(
-        &self,
-        request: REQ,
-        host: SocketAddr,
-    ) -> Result<(ResponseCode, RES), crate::errors::TChannelError> {
-        let (connection_res, frames_res) = join!(self.connect(host), self.create_frames(request));
-        let (frames_out, frames_in) = connection_res?;
-        send_frames(frames_res?, &frames_out).await?;
-        let response = Defragmenter::new(frames_in).read_response().await;
-        frames_out.close().await; //TODO ugly
-        response
-    }
-
-    async fn connect(&self, host: SocketAddr) -> Result<(FrameOutput, FrameInput), TChannelError> {
-        let pool = self.connection_pools.get(host).await?;
-        let connection = pool.get().await?;
-        Ok(connection.new_frame_io().await)
-    }
-
-    async fn create_frames<REQ: Request>(
-        &self,
-        request: REQ,
-    ) -> Result<TFrameStream, TChannelError> {
-        Fragmenter::new(
-            self.service_name.clone(),
-            REQ::args_scheme(),
-            request.to_args(),
-        )
-        .create_frames()
-    }
-}
-
-async fn send_frames(
-    frames: TFrameStream,
-    frames_out: &FrameOutput,
-) -> Result<(), ConnectionError> {
-    debug!("Sending frames");
-    frames
-        .then(|frame| frames_out.send(frame))
-        .inspect_err(|err| error!("Failed to send frame {:?}", err))
-        .try_for_each(|_res| future::ready(Ok(())))
-        .await
 }

@@ -1,24 +1,25 @@
-use crate::connection::{Connection, ConnectionOptions};
+use crate::connection::{Config, Connection};
 use crate::errors::ConnectionError;
-use crate::errors::ConnectionError::{MessageError, UnexpectedResponseError};
+use crate::errors::ConnectionError::{MessageErrorId, UnexpectedResponseError};
 use crate::frames::payloads::ErrorMsg;
 use crate::frames::payloads::Init;
 use crate::frames::payloads::{Codec, PROTOCOL_VERSION};
 use crate::frames::{TFrame, TFrameId, Type};
 use async_trait::async_trait;
 use bb8::{ErrorSink, Pool, PooledConnection, RunError};
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use log::{debug, error};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::net::TcpStream;
 use tokio::sync::RwLock;
 
 #[derive(Debug, Default, Builder)]
 #[builder(pattern = "owned")]
 pub struct ConnectionPools {
-    connection_options: ConnectionOptions,
+    config: Arc<Config>,
     #[builder(setter(skip))]
     pools: RwLock<HashMap<SocketAddr, Arc<Pool<ConnectionManager>>>>,
     #[builder(setter(skip))]
@@ -26,7 +27,6 @@ pub struct ConnectionPools {
 }
 
 impl ConnectionPools {
-    //TODO do not like name
     pub async fn get(
         &self,
         addr: SocketAddr,
@@ -41,19 +41,20 @@ impl ConnectionPools {
         &self,
         addr: SocketAddr,
     ) -> Result<Arc<Pool<ConnectionManager>>, RunError<ConnectionError>> {
+        debug!("Creating connection pool for '{}'", addr);
         let mut pools = self.pools.write().await;
         if let Some(pool) = pools.get(&addr) {
             return Ok(pool.clone());
         }
         let pool = Arc::new(
             Pool::builder()
-                .max_lifetime(self.connection_options.lifetime)
-                .max_size(self.connection_options.max_connections)
-                .test_on_check_out(self.connection_options.test_connection)
+                .max_lifetime(self.config.lifetime)
+                .max_size(self.config.max_connections)
+                .test_on_check_out(self.config.test_connection)
                 .error_sink(self.connection_pools_logger.boxed_clone())
                 .build(ConnectionManager {
                     addr,
-                    frame_buffer_size: self.connection_options.frame_buffer_size,
+                    frame_buffer_size: self.config.frame_buffer_size,
                 })
                 .await?,
         );
@@ -85,11 +86,14 @@ pub struct ConnectionManager {
 
 #[async_trait]
 impl bb8::ManageConnection for ConnectionManager {
+    //TODO create in out connection types?
     type Connection = Connection;
     type Error = ConnectionError;
 
     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
-        let connection = Connection::connect(self.addr, self.frame_buffer_size).await?;
+        debug!("Connecting to {}", self.addr);
+        let stream = TcpStream::connect(self.addr).await?;
+        let connection = Connection::connect(stream, self.frame_buffer_size).await?;
         verify(connection).await
     }
 
@@ -121,17 +125,17 @@ async fn verify(connection: Connection) -> Result<Connection, ConnectionError> {
         Type::Error => {
             let error = ErrorMsg::decode(frame_id.frame.payload_mut())?;
             debug!("Received error response {:?}", error);
-            Err(ConnectionError::MessageError(error))
+            Err(ConnectionError::MessageErrorId(error, *frame_id.id()))
         }
         other_type => Err(ConnectionError::UnexpectedResponseError(*other_type)),
     }
 }
 
 async fn init_handshake(connection: &Connection) -> Result<TFrameId, ConnectionError> {
-    let mut bytes = BytesMut::new();
+    debug!("Init handshake.");
     let init = Init::default();
-    init.encode(&mut bytes)?;
-    let init_frame = TFrame::new(Type::InitRequest, bytes.freeze());
+    //TODO add proper `crate::frames::headers::InitHeaderKey` headers
+    let init_frame = TFrame::new(Type::InitRequest, init.encode_bytes()?);
     connection.send_one(init_frame).await
 }
 
@@ -140,10 +144,12 @@ async fn ping(connection: &Connection) -> Result<(), ConnectionError> {
     connection
         .send_one(ping_req)
         .await
-        .map(|frame_id| frame_id.frame)
-        .map(|mut frame| match frame.frame_type() {
+        .map(|mut frame_id| match frame_id.frame.frame_type() {
             Type::PingResponse => Ok(()),
-            Type::Error => Err(MessageError(ErrorMsg::decode(frame.payload_mut())?)),
+            Type::Error => Err(MessageErrorId(
+                ErrorMsg::decode(frame_id.frame.payload_mut())?,
+                *frame_id.id(),
+            )),
             frame_type => Err(UnexpectedResponseError(*frame_type)),
         })?
 }

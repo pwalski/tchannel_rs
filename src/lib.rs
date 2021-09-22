@@ -19,31 +19,61 @@
 //!     * [ ] JSON
 //!     * [ ] HTTP
 //!     * [x] Raw
+//!  * [ ] Routing mesh
+//!  * [ ] Tracing
 //!
-//! Additional nonfunctional TODOs:
+//! Other TODOs:
 //!
 //!  * [ ] Proper tests (right now only few happy paths)
-//!  * [ ] Investigate WASI support
+//!  * [ ] Request response TTL
+//!  * [ ] Cancel request
+//!  * [ ] Claim requests
 //!
 //! ## Examples
 //! ```
-//! use std::net::SocketAddr;
-//! use std::str::FromStr;
+//! use tchannel_protocol::errors::TChannelError;
+//! use tchannel_protocol::handler::{RequestHandler, Response};
 //! use tchannel_protocol::messages::raw::RawMessage;
 //! use tchannel_protocol::messages::MessageChannel;
-//! use tchannel_protocol::{TChannel,ConnectionOptions};
+//! use tchannel_protocol::{Config, TChannel};
 //! use tokio::runtime::Runtime;
 //!
-//! Runtime::new().unwrap().spawn(async {
-//!     let request = RawMessage::new("endpoint_name".into(), "header".into(), "payload".into());
-//!     let host = SocketAddr::from_str("host_address:port").unwrap();
-//!     let mut tchannel = TChannel::new(ConnectionOptions::default()).unwrap();
-//!     let subchannel = tchannel.subchannel("server".to_owned()).await.unwrap();
-//!     match subchannel.send(request, host).await {
-//!         Ok(response) => println!("Response: {:?}", response),
-//!         Err(error) => println!("Fail: {:?}", error),
+//! fn main() -> Result<(), TChannelError> {
+//!     let tserver = Runtime::new().unwrap().block_on(run())?;
+//!     // Shutdown outside of async
+//!     Ok(tserver.shutdown_server())
+//! }
+//!
+//! async fn run() -> Result<TChannel, TChannelError> {
+//!     // Server
+//!     let mut tserver = TChannel::new(Config::default())?;
+//!     let subchannel = tserver.subchannel("service".to_string()).await?;
+//!     subchannel.register("endpoint", Handler {}).await?;
+//!     tserver.start_server()?;
+//!
+//!     // Client
+//!     let tclient = TChannel::new(Config::default())?;
+//!     let subchannel = tclient.subchannel("service".to_string()).await?;
+//!     let request = RawMessage::new("endpoint".into(), "a".into(), "b".into());
+//!     let response_res = subchannel.send(request, "127.0.0.1:8888").await;
+//!
+//!     assert!(response_res.is_ok());
+//!     let response = response_res.unwrap();
+//!     assert_eq!("a", response.header());
+//!     assert_eq!("y".as_bytes(), response.body().as_ref());
+//!     Ok(tserver)
+//! }
+//!
+//! #[derive(Debug)]
+//! struct Handler {}
+//! impl RequestHandler for Handler {
+//!     type REQ = RawMessage;
+//!     type RES = RawMessage;
+//!     fn handle(&mut self, request: Self::REQ) -> Response<Self::RES> {
+//!         let req_header = request.header().clone();
+//!         Ok(RawMessage::new("x".into(), req_header, "y".into()))
 //!     }
-//! });
+//! }
 //! ```
 //!
 
@@ -70,12 +100,13 @@ pub(crate) mod connection;
 pub(crate) mod defragmentation;
 pub(crate) mod fragmentation;
 pub(crate) mod frames;
-pub(crate) mod handler;
+pub(crate) mod server;
+pub(crate) mod subchannel;
 
 pub mod errors;
+pub mod handler;
 pub mod messages;
 
-pub use self::channel::SubChannel;
 pub use self::channel::TChannel;
-pub use self::connection::ConnectionOptions;
-pub use self::connection::ConnectionOptionsBuilder;
+pub use self::connection::Config;
+pub use self::subchannel::SubChannel;

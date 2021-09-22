@@ -52,7 +52,7 @@ pub type TFrameStream = Pin<Box<dyn Stream<Item = TFrame> + Send>>;
 #[derive(Debug, Getters, MutGetters, new)]
 pub struct TFrame {
     #[get = "pub"]
-    frame_type: Type,
+    pub frame_type: Type,
     #[get_mut = "pub"]
     #[get = "pub"]
     payload: Bytes,
@@ -69,6 +69,7 @@ pub struct TFrameId {
     #[get = "pub"]
     id: u32,
     #[get = "pub"]
+    #[get_mut = "pub"]
     pub frame: TFrame,
 }
 

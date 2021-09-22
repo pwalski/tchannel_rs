@@ -4,34 +4,122 @@ use crate::frames::headers::TransportHeaderKey::CallerName;
 use crate::frames::headers::{ArgSchemeValue, TransportHeaderKey};
 use crate::frames::payloads::Codec;
 use crate::frames::payloads::{
-    CallArgs, CallContinue, CallFieldsEncoded, CallRequestFields, ChecksumType, Flags, TraceFlags,
-    Tracing, ARG_LEN_LEN,
+    CallArgs, CallContinue, CallRequestFields, CallResponseFields, CallWithFieldsEncoded,
+    ChecksumType, Flags, TraceFlags, Tracing, ARG_LEN_LEN,
 };
 use crate::frames::{TFrame, TFrameStream, Type, FRAME_HEADER_LENGTH, FRAME_MAX_LENGTH};
+use crate::messages::{MessageArgs, ResponseCode};
 use bytes::Buf;
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use std::collections::{HashMap, VecDeque};
 
-#[derive(Debug, new)]
-pub struct Fragmenter {
+#[derive(Debug)]
+pub struct ResponseFragmenter {
+    fragmenter: Fragmenter,
+    response_code: ResponseCode,
+}
+
+impl ResponseFragmenter {
+    pub fn new(
+        service_name: String,
+        args: MessageArgs,
+        response_code: ResponseCode,
+    ) -> ResponseFragmenter {
+        ResponseFragmenter {
+            fragmenter: Fragmenter::new(service_name, args),
+            response_code,
+        }
+    }
+
+    pub fn create_frames(self) -> Result<TFrameStream, TChannelError> {
+        let fields = self.create_fields();
+        self.fragmenter
+            .create_frames(fields, Type::CallResponse, Type::CallResponseContinue)
+    }
+
+    fn create_fields(&self) -> CallResponseFields {
+        let tracing = create_tracing();
+        let headers = self.create_headers(); //TODO get rid of clones
+        CallResponseFields::new(self.response_code, tracing, headers)
+        //TODO configurable TTL
+    }
+
+    fn create_headers(&self) -> HashMap<String, String> {
+        self.fragmenter.create_headers()
+    }
+}
+
+#[derive(Debug)]
+pub struct RequestFragmenter {
+    fragmenter: Fragmenter,
+}
+
+impl RequestFragmenter {
+    pub fn new(service_name: String, args: MessageArgs) -> RequestFragmenter {
+        let fragmenter = Fragmenter::new(service_name, args);
+        RequestFragmenter { fragmenter }
+    }
+
+    pub fn create_frames(self) -> Result<TFrameStream, TChannelError> {
+        let fields = self.create_fields();
+        self.fragmenter
+            .create_frames(fields, Type::CallRequest, Type::CallRequestContinue)
+    }
+
+    fn create_fields(&self) -> CallRequestFields {
+        let tracing = create_tracing();
+        let headers = self.create_headers(); //TODO get rid of clones
+        CallRequestFields::new(
+            60_000,
+            tracing,
+            self.fragmenter.service_name.clone(),
+            headers,
+        )
+        //TODO configurable TTL
+    }
+
+    fn create_headers(&self) -> HashMap<String, String> {
+        self.fragmenter.create_headers()
+        //TODO add claim add start/finish headers
+        //TODO add failure domain header
+        //TODO add retry flag header
+        //TODO add speculative execution header
+        //TODO add shart key header
+        //TODO add routing delegate header
+    }
+}
+
+#[derive(Debug)]
+struct Fragmenter {
     service_name: String,
     arg_scheme: ArgSchemeValue,
-    args: Vec<Bytes>,
+    args: VecDeque<Bytes>,
 }
 
 impl Fragmenter {
-    pub fn create_frames(mut self) -> Result<TFrameStream, TChannelError> {
-        self.args.reverse();
+    pub fn new(service_name: String, args: MessageArgs) -> Fragmenter {
+        Fragmenter {
+            service_name,
+            arg_scheme: args.arg_scheme,
+            args: VecDeque::from(args.args),
+        }
+    }
 
-        let request_fields = self.create_request_fields_bytes()?;
-        let payload_limit = calculate_payload_limit(request_fields.len());
+    pub fn create_frames<FIELDS: Codec>(
+        mut self,
+        fields: FIELDS,
+        first_type: Type,
+        continuation_type: Type,
+    ) -> Result<TFrameStream, TChannelError> {
+        let fields_bytes = fields.encode_bytes()?;
+        let payload_limit = calculate_payload_limit(fields_bytes.len());
         let frame_args = self.next_frame_args(payload_limit);
         let flag = self.current_frame_flag();
 
-        let mut call_frames = Vec::new();
-        let call_request = CallFieldsEncoded::new(flag, request_fields, frame_args);
+        let mut frames = Vec::new();
+        let call_request = CallWithFieldsEncoded::new(flag, fields_bytes, frame_args);
         debug!("Creating call request {:?}", call_request);
-        call_frames.push(TFrame::new(Type::CallRequest, call_request.encode_bytes()?));
+        frames.push(TFrame::new(first_type, call_request.encode_bytes()?));
 
         while !self.args.is_empty() {
             debug!("Creating call continue");
@@ -39,36 +127,13 @@ impl Fragmenter {
             let frame_args = self.next_frame_args(payload_limit);
             let flag = self.current_frame_flag();
             let call_continue = CallContinue::new(flag, frame_args);
-            call_frames.push(TFrame::new(
-                Type::CallRequestContinue,
+            frames.push(TFrame::new(
+                continuation_type,
                 call_continue.encode_bytes()?,
             ))
         }
-        debug!("Done! {} frames", call_frames.len());
-        Ok(Box::pin(futures::stream::iter(call_frames)))
-    }
-
-    fn create_request_fields_bytes(&self) -> Result<Bytes, TChannelError> {
-        let mut bytes = BytesMut::new();
-        self.create_request_fields().encode(&mut bytes)?;
-        Ok(Bytes::from(bytes))
-    }
-
-    fn create_request_fields(&self) -> CallRequestFields {
-        let tracing = create_tracing();
-        let headers = self.create_headers(); //TODO get rid of clones
-        CallRequestFields::new(60_000, tracing, self.service_name.clone(), headers)
-        //TODO configurable TTL
-    }
-
-    fn create_headers(&self) -> HashMap<String, String> {
-        let mut headers = HashMap::new();
-        headers.insert(
-            TransportHeaderKey::ArgScheme.to_string(),
-            self.arg_scheme.to_string(),
-        );
-        headers.insert(CallerName.to_string(), self.service_name.clone());
-        headers
+        debug!("Done! {} frames", frames.len());
+        Ok(Box::pin(futures::stream::iter(frames)))
     }
 
     fn next_frame_args(&mut self, payload_limit: usize) -> CallArgs {
@@ -85,7 +150,7 @@ impl Fragmenter {
     ) -> VecDeque<Option<Bytes>> {
         let mut frame_args = VecDeque::with_capacity(3);
         let mut remaining_limit = payload_limit as i32 - checksum_len(checksum_type) as i32;
-        while let Some(mut arg) = self.args.pop() {
+        while let Some(mut arg) = self.args.pop_front() {
             remaining_limit -= ARG_LEN_LEN as i32;
             let (status, frame_arg_res) = fragment_arg(&mut arg, remaining_limit);
             if let Some(frame_arg) = frame_arg_res {
@@ -98,10 +163,10 @@ impl Fragmenter {
                 }
             }
             if status == Incomplete {
-                self.args.push(arg);
+                self.args.push_front(arg);
                 break;
             } else if status == CompleteAtTheEnd {
-                self.args.push(Bytes::new());
+                self.args.push_front(Bytes::new());
                 break;
             }
         }
@@ -114,6 +179,17 @@ impl Fragmenter {
         } else {
             Flags::MORE_FRAGMENTS_FOLLOW
         }
+    }
+
+    pub fn create_headers(&self) -> HashMap<String, String> {
+        let mut headers = HashMap::new();
+        headers.insert(
+            TransportHeaderKey::ArgScheme.to_string(),
+            self.arg_scheme.to_string(),
+        );
+        headers.insert(CallerName.to_string(), self.service_name.clone());
+        //TODO add failure domain
+        headers
     }
 }
 
@@ -171,12 +247,14 @@ fn calculate_checksum(_args: &VecDeque<Option<Bytes>>, csum_type: ChecksumType) 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use futures::StreamExt;
+    use tokio_test::*;
+
     use crate::frames::payloads::CallContinue;
     use crate::frames::payloads::CallRequest;
     use crate::frames::TFrame;
-    use futures::StreamExt;
-    use tokio_test::*;
+
+    use super::*;
 
     const SERVICE_NAME: &str = "test_service";
     const ARG_SCHEME: ArgSchemeValue = ArgSchemeValue::Json;
@@ -185,7 +263,8 @@ mod tests {
     fn single_frame() {
         // Given
         let args = [Bytes::from("a"), Bytes::from("b"), Bytes::from("c")].to_vec();
-        let fragmenter = Fragmenter::new(SERVICE_NAME.to_string(), ARG_SCHEME, args);
+        let fragmenter =
+            RequestFragmenter::new(SERVICE_NAME.to_string(), MessageArgs::new(ARG_SCHEME, args));
 
         // When
         let frames_res = fragmenter.create_frames();
@@ -224,10 +303,12 @@ mod tests {
         let arg2 = Bytes::from(vec![b'b'; (u16::MAX / 2) as usize]);
         // arg3 will take remaining space of 2nd frame and part of 3rd frame
         let arg3 = Bytes::from(vec![b'c'; (u16::MAX) as usize]);
-        let fragmenter = Fragmenter::new(
+        let fragmenter = RequestFragmenter::new(
             SERVICE_NAME.to_string(),
-            ARG_SCHEME,
-            [arg1.clone(), arg2.clone(), arg3.clone()].to_vec(),
+            MessageArgs::new(
+                ARG_SCHEME,
+                [arg1.clone(), arg2.clone(), arg3.clone()].into(),
+            ),
         );
 
         // When

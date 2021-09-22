@@ -83,6 +83,7 @@ public final class SyncRequest {
 
         // create TChannel
         TChannel tchannel = new TChannel.Builder("server")
+            .setServerHost(InetAddress.getByAddress(new byte[] {127,0,0,1}))
             .setServerPort(8888)
             .build();
 

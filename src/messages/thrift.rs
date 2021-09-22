@@ -1,27 +1,28 @@
 use crate::errors::CodecError;
 use crate::frames::headers::ArgSchemeValue;
-use crate::messages::{Message, Request};
-use bytes::Bytes;
-use std::convert::TryFrom;
+use crate::messages::{Message, MessageArgs};
+use std::convert::{TryFrom, TryInto};
 
 #[derive(Default, Debug)]
 pub struct ThriftMessage {}
-
-impl TryFrom<Vec<Bytes>> for ThriftMessage {
-    type Error = CodecError;
-    fn try_from(_args: Vec<Bytes>) -> Result<Self, Self::Error> {
-        todo!()
-    }
-}
 
 impl Message for ThriftMessage {
     fn args_scheme() -> ArgSchemeValue {
         ArgSchemeValue::Thrift
     }
+}
 
-    fn to_args(self) -> Vec<Bytes> {
+impl TryFrom<MessageArgs> for ThriftMessage {
+    type Error = CodecError;
+    fn try_from(_args: MessageArgs) -> Result<Self, Self::Error> {
         todo!()
     }
 }
 
-impl Request for ThriftMessage {}
+#[allow(clippy::from_over_into)]
+impl TryInto<MessageArgs> for ThriftMessage {
+    type Error = CodecError;
+    fn try_into(self) -> Result<MessageArgs, Self::Error> {
+        todo!()
+    }
+}

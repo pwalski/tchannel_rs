@@ -1,9 +1,12 @@
-use crate::frames::payloads::ErrorMsg;
+use crate::frames::payloads::{ErrorCode, ErrorMsg, Tracing};
 use crate::frames::{TFrameId, Type};
+use crate::messages::Message;
 use bb8::RunError;
 use std::fmt::{Display, Formatter};
 use std::string::FromUtf8Error;
+use strum::ParseError;
 use thiserror::Error;
+use tokio::sync::mpsc::error::SendError;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum TChannelError {
@@ -21,6 +24,7 @@ pub enum TChannelError {
     ConnectionPoolError(#[from] RunError<ConnectionError>),
 }
 
+/// Frame encoding error.
 #[derive(Error, Debug, PartialEq)]
 pub enum CodecError {
     #[error("Codec error: {0}")]
@@ -35,8 +39,12 @@ pub enum CodecError {
 
     #[error(transparent)]
     StringDecodingError(#[from] FromUtf8Error),
+
+    #[error(transparent)]
+    ParseError(#[from] ParseError),
 }
 
+/// Host connection error.
 #[derive(Error, Debug, PartialEq)]
 pub enum ConnectionError {
     /// Represents general error.
@@ -51,29 +59,28 @@ pub enum ConnectionError {
     #[error(transparent)]
     FrameError(#[from] CodecError),
 
-    #[error(transparent)]
-    SendError(#[from] SendError),
-
+    // #[error("Error message: {0:?}")]
+    // MessageError(ErrorMsg),
     #[error("Error message: {0:?}")]
-    MessageError(ErrorMsg),
+    MessageErrorId(ErrorMsg, u32),
 
     #[error("Unexpected response: {0:?}")]
     UnexpectedResponseError(Type),
 }
 
-#[derive(Error, Debug)]
-pub struct SendError(tokio::sync::mpsc::error::SendError<TFrameId>);
+/// Request handler Error
+#[derive(Error, Debug, PartialEq)]
+pub enum HandlerError<RES: Message> {
+    #[error(transparent)]
+    TChannelError(#[from] TChannelError),
 
-impl PartialEq for SendError {
-    fn eq(&self, _other: &Self) -> bool {
-        false
-    }
-}
+    /// A general error.
+    #[error("Handler error: {0}")]
+    GeneralError(String),
 
-impl Display for SendError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
+    /// A message response with error code.
+    #[error("Handler registration error: {0}")]
+    MessageError(RES),
 }
 
 #[derive(Error, Debug)]
@@ -103,12 +110,6 @@ impl From<std::io::Error> for ConnectionError {
     }
 }
 
-impl From<tokio::sync::mpsc::error::SendError<TFrameId>> for ConnectionError {
-    fn from(err: tokio::sync::mpsc::error::SendError<TFrameId>) -> Self {
-        ConnectionError::SendError(SendError(err))
-    }
-}
-
 impl From<String> for TChannelError {
     fn from(err: String) -> Self {
         TChannelError::Error(err)
@@ -124,5 +125,18 @@ impl From<String> for ConnectionError {
 impl From<String> for CodecError {
     fn from(err: String) -> Self {
         CodecError::Error(err)
+    }
+}
+
+impl From<SendError<TFrameId>> for ConnectionError {
+    fn from(err: SendError<TFrameId>) -> Self {
+        ConnectionError::MessageErrorId(
+            ErrorMsg::new(
+                ErrorCode::UnexpectedError,
+                Tracing::default(),
+                format!("Failed to handle frame: {}", err),
+            ),
+            *err.0.id(),
+        )
     }
 }
