@@ -1,17 +1,19 @@
-use tchannel_protocol::errors::TChannelError;
-use tchannel_protocol::handler::{RequestHandler, Response};
+use tchannel_protocol::handler::HandlerResult;
+use tchannel_protocol::handler::RequestHandler;
 use tchannel_protocol::messages::raw::RawMessage;
 use tchannel_protocol::messages::MessageChannel;
+use tchannel_protocol::TResult;
 use tchannel_protocol::{Config, TChannel};
 use tokio::runtime::Runtime;
 
-fn main() -> Result<(), TChannelError> {
+fn main() -> TResult<()> {
     let tserver = Runtime::new().unwrap().block_on(run())?;
     // Shutdown outside of async
-    Ok(tserver.shutdown_server())
+    tserver.shutdown_server();
+    Ok(())
 }
 
-async fn run() -> Result<TChannel, TChannelError> {
+async fn run() -> TResult<TChannel> {
     // Server
     let mut tserver = TChannel::new(Config::default())?;
     let subchannel = tserver.subchannel("service".to_string()).await?;
@@ -36,7 +38,7 @@ struct Handler {}
 impl RequestHandler for Handler {
     type REQ = RawMessage;
     type RES = RawMessage;
-    fn handle(&mut self, request: Self::REQ) -> Response<Self::RES> {
+    fn handle(&mut self, request: Self::REQ) -> HandlerResult<Self::RES> {
         let req_header = request.header().clone();
         Ok(RawMessage::new("x".into(), req_header, "y".into()))
     }

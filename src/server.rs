@@ -1,5 +1,5 @@
-use crate::channel::SharedSubChannels;
-use crate::connection::{Config, FrameInput, FrameSender, FramesDispatcher};
+use crate::channel::{SharedSubChannels, TResult};
+use crate::connection::{Config, ConnectionResult, FrameInput, FrameSender, FramesDispatcher};
 use crate::defragmentation::RequestDefragmenter;
 use crate::errors::{ConnectionError, TChannelError};
 use crate::fragmentation::ResponseFragmenter;
@@ -41,10 +41,7 @@ impl Server {
         }
     }
 
-    pub async fn run(
-        config: Arc<Config>,
-        subchannels: SharedSubChannels,
-    ) -> Result<(), ConnectionError> {
+    pub async fn run(config: Arc<Config>, subchannels: SharedSubChannels) -> ConnectionResult<()> {
         debug!("Starting server on {}", config.server_address);
         let listener = TcpListener::bind(config.server_address).await?;
         loop {
@@ -63,7 +60,7 @@ impl Server {
         }
     }
 
-    async fn handle_connection(&mut self, stream: TcpStream) -> Result<(), ConnectionError> {
+    async fn handle_connection(&mut self, stream: TcpStream) -> ConnectionResult<()> {
         let (read, write) = stream.into_split();
         let mut framed_read = FramedRead::new(read, TFrameIdCodec {});
         let mut framed_write = FramedWrite::new(write, TFrameIdCodec {});
@@ -99,10 +96,7 @@ impl Server {
         Ok(())
     }
 
-    async fn dispatch_frame(
-        &self,
-        frame: TFrameId,
-    ) -> Result<Option<(u32, FrameInput)>, ConnectionError> {
+    async fn dispatch_frame(&self, frame: TFrameId) -> ConnectionResult<Option<(u32, FrameInput)>> {
         let id = *frame.id();
         self.frame_dispatchers
             .dispatch(frame)
@@ -114,7 +108,7 @@ impl Server {
         &self,
         framed_read: &mut TFramedRead,
         framed_write: &mut TFramedWrite,
-    ) -> Result<(), ConnectionError> {
+    ) -> ConnectionResult<()> {
         match framed_read.next().await {
             Some(Ok(mut frame_id)) => {
                 Self::check_init_req(&mut frame_id).await?;
@@ -128,7 +122,7 @@ impl Server {
         }
     }
 
-    async fn check_init_req(frame_id: &mut TFrameId) -> Result<(), ConnectionError> {
+    async fn check_init_req(frame_id: &mut TFrameId) -> ConnectionResult<()> {
         let frame = frame_id.frame_mut();
         match frame.frame_type() {
             Type::InitRequest => {
@@ -150,10 +144,7 @@ impl Server {
         }
     }
 
-    async fn send_init_res(
-        framed_write: &mut TFramedWrite,
-        id: u32,
-    ) -> Result<(), ConnectionError> {
+    async fn send_init_res(framed_write: &mut TFramedWrite, id: u32) -> ConnectionResult<()> {
         //TODO properly handle Init headers
         let headers = HashMap::from_iter(IntoIter::new([(
             InitHeaderKey::TChannelLanguage.to_string(),
@@ -165,11 +156,7 @@ impl Server {
         Ok(framed_write.send(init_frame_id).await?)
     }
 
-    async fn handle_request(
-        &self,
-        id: u32,
-        frame_input: FrameInput,
-    ) -> Result<Vec<TFrameId>, TChannelError> {
+    async fn handle_request(&self, id: u32, frame_input: FrameInput) -> TResult<Vec<TFrameId>> {
         let (request_fields, message_args) =
             RequestDefragmenter::new(frame_input).read_request().await?;
         //TODO start handling TTL here?
@@ -202,10 +189,7 @@ impl Server {
         }
     }
 
-    async fn get_subchannel<STR: AsRef<str>>(
-        &self,
-        service: STR,
-    ) -> Result<Arc<SubChannel>, TChannelError> {
+    async fn get_subchannel<STR: AsRef<str>>(&self, service: STR) -> TResult<Arc<SubChannel>> {
         let subchannels = self.subchannels.read().await;
         subchannels.get(service.as_ref()).cloned().ok_or_else(|| {
             TChannelError::Error(format!("Failed to find subchannel '{}'", service.as_ref()))

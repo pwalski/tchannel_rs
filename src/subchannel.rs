@@ -1,11 +1,12 @@
+use crate::channel::TResult;
 use crate::connection::pool::ConnectionPools;
-use crate::connection::{FrameInput, FrameOutput};
+use crate::connection::{ConnectionResult, FrameInput, FrameOutput};
 use crate::defragmentation::ResponseDefragmenter;
 use crate::errors::{CodecError, ConnectionError, HandlerError, TChannelError};
 use crate::fragmentation::RequestFragmenter;
 use crate::frames::TFrameStream;
 use crate::handler::{
-    MessageArgsHandler, RequestHandler, RequestHandlerAdapter, RequestHandlerAsync,
+    HandlerResult, MessageArgsHandler, RequestHandler, RequestHandlerAdapter, RequestHandlerAsync,
     RequestHandlerAsyncAdapter,
 };
 use crate::messages::ResponseCode;
@@ -21,6 +22,7 @@ use tokio::sync::{Mutex, RwLock};
 
 type HandlerRef = Arc<Mutex<Box<dyn MessageArgsHandler>>>;
 
+/// TChannel protocol subchannel.
 #[derive(Debug, new)]
 pub struct SubChannel {
     service_name: String,
@@ -30,11 +32,16 @@ pub struct SubChannel {
 }
 
 impl SubChannel {
+    /// Sends `message` to `host` address.
+    ///
+    /// # Arguments
+    /// * `request` - Implementation of `Message` trait
+    /// * `host` - Address used to connect to host or find previously pooled connection.
     pub(super) async fn send<REQ: Message, RES: Message, ADDR: ToSocketAddrs>(
         &self,
         request: REQ,
         host: ADDR,
-    ) -> Result<RES, HandlerError<RES>> {
+    ) -> HandlerResult<RES> {
         match self.send_internal(request, host).await {
             Ok((code, response)) => match code {
                 ResponseCode::Ok => Ok(response),
@@ -48,7 +55,7 @@ impl SubChannel {
         &self,
         request: REQ,
         host: ADDR,
-    ) -> Result<(ResponseCode, RES), TChannelError> {
+    ) -> TResult<(ResponseCode, RES)> {
         let host = first_addr(host)?;
         let (connection_res, frames_res) =
             join!(self.connect(host), self.create_frames(request.try_into()?));
@@ -61,12 +68,12 @@ impl SubChannel {
         response
     }
 
-    /// Register request handler.
-    pub async fn register<S: AsRef<str>, REQ, RES, HANDLER>(
+    /// Registers request handler.
+    pub async fn register<STR: AsRef<str>, REQ, RES, HANDLER>(
         &self,
-        endpoint: S,
+        endpoint: STR,
         request_handler: HANDLER,
-    ) -> Result<(), TChannelError>
+    ) -> TResult<()>
     where
         REQ: Message + 'static,
         RES: Message + 'static,
@@ -77,12 +84,12 @@ impl SubChannel {
             .await
     }
 
-    /// Register async request handler.
-    pub async fn register_async<S: AsRef<str>, REQ, RES, HANDLER>(
+    /// Registers async request handler.
+    pub async fn register_async<STR: AsRef<str>, REQ, RES, HANDLER>(
         &self,
-        endpoint: S,
+        endpoint: STR,
         request_handler: HANDLER,
-    ) -> Result<(), TChannelError>
+    ) -> TResult<()>
     where
         REQ: Message + 'static,
         RES: Message + 'static,
@@ -94,7 +101,7 @@ impl SubChannel {
     }
 
     /// Unregister request handler.
-    pub async fn unregister<S: AsRef<str>>(&mut self, endpoint: S) -> Result<(), TChannelError> {
+    pub async fn unregister<S: AsRef<str>>(&mut self, endpoint: S) -> TResult<()> {
         let mut handlers = self.handlers.write().await;
         match handlers.remove(endpoint.as_ref()) {
             Some(_) => Ok(()),
@@ -109,7 +116,7 @@ impl SubChannel {
         &self,
         endpoint: S,
         request_handler: HandlerRef,
-    ) -> Result<(), TChannelError> {
+    ) -> TResult<()> {
         let mut handlers = self.handlers.write().await;
         if handlers.contains_key(endpoint.as_ref()) {
             return Err(TChannelError::Error(format!(
@@ -121,16 +128,13 @@ impl SubChannel {
         Ok(()) //TODO return &mut of nested handler?
     }
 
-    async fn connect(&self, host: SocketAddr) -> Result<(FrameInput, FrameOutput), TChannelError> {
+    async fn connect(&self, host: SocketAddr) -> TResult<(FrameInput, FrameOutput)> {
         let pool = self.connection_pools.get(host).await?;
         let connection = pool.get().await?;
         Ok(connection.new_frames_io().await?)
     }
 
-    async fn create_frames(
-        &self,
-        request_args: MessageArgs,
-    ) -> Result<TFrameStream, TChannelError> {
+    async fn create_frames(&self, request_args: MessageArgs) -> TResult<TFrameStream> {
         RequestFragmenter::new(self.service_name.clone(), request_args).create_frames()
     }
 
@@ -141,7 +145,7 @@ impl SubChannel {
         handler.handle(request).await
     }
 
-    async fn get_handler(&self, endpoint: String) -> Result<HandlerRef, TChannelError> {
+    async fn get_handler(&self, endpoint: String) -> TResult<HandlerRef> {
         let handlers = self.handlers.read().await;
         match handlers.get(&endpoint) {
             Some(handler) => Ok(handler.clone()),
@@ -160,7 +164,7 @@ impl SubChannel {
     }
 }
 
-fn first_addr<ADDR: ToSocketAddrs>(addr: ADDR) -> Result<SocketAddr, ConnectionError> {
+fn first_addr<ADDR: ToSocketAddrs>(addr: ADDR) -> ConnectionResult<SocketAddr> {
     let mut addrs = addr.to_socket_addrs()?;
     if let Some(addr) = addrs.next() {
         return Ok(addr);
@@ -170,10 +174,7 @@ fn first_addr<ADDR: ToSocketAddrs>(addr: ADDR) -> Result<SocketAddr, ConnectionE
     ))
 }
 
-async fn send_frames(
-    frames: TFrameStream,
-    frames_out: &FrameOutput,
-) -> Result<(), ConnectionError> {
+async fn send_frames(frames: TFrameStream, frames_out: &FrameOutput) -> ConnectionResult<()> {
     debug!("Sending frames");
     frames
         .then(|frame| frames_out.send(frame))

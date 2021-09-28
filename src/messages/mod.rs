@@ -1,6 +1,7 @@
-use crate::errors::{CodecError, TChannelError};
+use crate::channel::TResult;
+use crate::errors::CodecError;
 use crate::frames::headers::ArgSchemeValue;
-use crate::handler::Response;
+use crate::handler::HandlerResult;
 use bytes::Bytes;
 use futures::Future;
 use std::convert::{TryFrom, TryInto};
@@ -29,7 +30,7 @@ pub trait MessageChannel {
         &'a self,
         request: Self::REQ,
         host: ADDR,
-    ) -> Pin<Box<dyn Future<Output = Response<Self::RES>> + Send + '_>>;
+    ) -> Pin<Box<dyn Future<Output = HandlerResult<Self::RES>> + Send + '_>>;
 }
 
 #[derive(Debug, new)]
@@ -38,7 +39,7 @@ pub struct MessageArgs {
     pub args: Vec<Bytes>,
 }
 
-pub(crate) type MessageArgsResponse = Result<(ResponseCode, MessageArgs), TChannelError>;
+pub(crate) type MessageArgsResponse = TResult<(ResponseCode, MessageArgs)>;
 
 #[derive(Copy, Clone, Debug, PartialEq, FromPrimitive, ToPrimitive)]
 pub enum ResponseCode {

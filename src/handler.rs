@@ -5,8 +5,6 @@ use futures::{future, Future};
 use std::fmt::Debug;
 use std::pin::Pin;
 
-pub type Response<RES> = Result<RES, HandlerError<RES>>;
-
 /// Trait for handling requests asynchronously.
 ///
 /// Handler can be registered under an `endpoint` name by calling [`SubChannel::register_async`] method.
@@ -16,7 +14,7 @@ pub trait RequestHandlerAsync: Debug + Sync + Send {
     fn handle(
         &mut self,
         request: Self::REQ,
-    ) -> Pin<Box<dyn Future<Output = Response<Self::RES>> + Send + '_>>;
+    ) -> Pin<Box<dyn Future<Output = HandlerResult<Self::RES>> + Send + '_>>;
 }
 
 /// Trait for handling requests.
@@ -25,7 +23,7 @@ pub trait RequestHandlerAsync: Debug + Sync + Send {
 pub trait RequestHandler: Debug + Sync + Send {
     type REQ: Message;
     type RES: Message;
-    fn handle(&mut self, request: Self::REQ) -> Response<Self::RES>;
+    fn handle(&mut self, request: Self::REQ) -> HandlerResult<Self::RES>;
 }
 
 pub(crate) trait MessageArgsHandler: Debug + Send + Sync {
@@ -72,7 +70,7 @@ impl<REQ: Message, RES: Message, HANDLER: RequestHandler<REQ = REQ, RES = RES>>
     }
 }
 
-fn convert<MSG: Message>(msg_res: Result<MSG, HandlerError<MSG>>) -> MessageArgsResponse {
+fn convert<MSG: Message>(msg_res: HandlerResult<MSG>) -> MessageArgsResponse {
     match msg_res {
         Ok(message) => Ok((ResponseCode::Ok, message.try_into()?)),
         Err(err) => match err {
@@ -93,3 +91,5 @@ impl<REQ: Message, RES: Message, HANDLER: RequestHandler<REQ = REQ, RES = RES>> 
         Box::pin(future::ready(self.handle(request_args)))
     }
 }
+
+pub type HandlerResult<MES> = Result<MES, HandlerError<MES>>;

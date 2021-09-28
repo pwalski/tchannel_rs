@@ -1,17 +1,16 @@
-use std::collections::VecDeque;
-use std::str::FromStr;
-
-use bytes::{Buf, BufMut, Bytes, BytesMut};
-
+use crate::channel::TResult;
 use crate::connection::FrameInput;
 use crate::errors::{CodecError, TChannelError};
 use crate::frames::headers::{ArgSchemeValue, TransportHeaderKey};
 use crate::frames::payloads::{
     Call, CallArgs, CallContinue, CallFields, CallRequest, CallRequestFields, CallResponse,
-    CallResponseFields, ChecksumType, Codec, Flags,
+    CallResponseFields, ChecksumType, Codec, CodecResult, Flags,
 };
 use crate::frames::Type;
 use crate::messages::{Message, MessageArgs, ResponseCode};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+use std::collections::VecDeque;
+use std::str::FromStr;
 
 #[derive(Debug)]
 pub struct ResponseDefragmenter {
@@ -25,15 +24,13 @@ impl ResponseDefragmenter {
     }
 
     #[allow(dead_code)]
-    pub async fn read_response(self) -> Result<(CallResponseFields, MessageArgs), TChannelError> {
+    pub async fn read_response(self) -> TResult<(CallResponseFields, MessageArgs)> {
         self.defragmenter
             .read(Type::CallResponse, CallResponse::decode)
             .await
     }
 
-    pub async fn read_response_msg<MSG: Message>(
-        self,
-    ) -> Result<(ResponseCode, MSG), TChannelError> {
+    pub async fn read_response_msg<MSG: Message>(self) -> TResult<(ResponseCode, MSG)> {
         let (fields, message_args) = self
             .defragmenter
             .read_and_check(Type::CallResponse, CallResponse::decode, |fields| {
@@ -56,14 +53,14 @@ impl RequestDefragmenter {
         RequestDefragmenter { defragmenter }
     }
 
-    pub async fn read_request(self) -> Result<(CallRequestFields, MessageArgs), TChannelError> {
+    pub async fn read_request(self) -> TResult<(CallRequestFields, MessageArgs)> {
         self.defragmenter
             .read(Type::CallRequest, CallRequest::decode)
             .await
     }
 
     #[allow(dead_code)]
-    pub async fn read_request_msg<MSG: Message>(self) -> Result<MSG, TChannelError> {
+    pub async fn read_request_msg<MSG: Message>(self) -> TResult<MSG> {
         let _checker = ArgSchemeChecker {
             arg_scheme: MSG::args_scheme(),
         };
@@ -86,8 +83,8 @@ impl Defragmenter {
     async fn read<FIELDS: CallFields, FRAME: Codec + Call<FIELDS>>(
         self,
         frame_type: Type,
-        decoder: fn(src: &mut Bytes) -> Result<FRAME, CodecError>,
-    ) -> Result<(FIELDS, MessageArgs), TChannelError> {
+        decoder: fn(src: &mut Bytes) -> CodecResult<FRAME>,
+    ) -> TResult<(FIELDS, MessageArgs)> {
         self.read_and_check(frame_type, decoder, get_args_scheme)
             .await
     }
@@ -95,9 +92,9 @@ impl Defragmenter {
     async fn read_and_check<FIELDS: CallFields, FRAME: Codec + Call<FIELDS>>(
         mut self,
         frame_type: Type,
-        decode: fn(src: &mut Bytes) -> Result<FRAME, CodecError>,
-        check_fields: fn(fields: &FIELDS) -> Result<ArgSchemeValue, CodecError>,
-    ) -> Result<(FIELDS, MessageArgs), TChannelError> {
+        decode: fn(src: &mut Bytes) -> CodecResult<FRAME>,
+        check_fields: fn(fields: &FIELDS) -> CodecResult<ArgSchemeValue>,
+    ) -> TResult<(FIELDS, MessageArgs)> {
         let mut args_defragmenter = ArgsDefragmenter::default();
         let (fields, flags) = self
             .read_beginning(frame_type, decode, &mut args_defragmenter)
@@ -115,9 +112,9 @@ impl Defragmenter {
     async fn read_beginning<FIELDS: CallFields, FRAME: Codec + Call<FIELDS>>(
         &mut self,
         frame_type: Type,
-        decoder: fn(src: &mut Bytes) -> Result<FRAME, CodecError>,
+        decoder: fn(src: &mut Bytes) -> CodecResult<FRAME>,
         args_defragmenter: &mut ArgsDefragmenter,
-    ) -> Result<(FIELDS, Flags), TChannelError> {
+    ) -> TResult<(FIELDS, Flags)> {
         if let Some(frame_id) = self.frame_input.recv().await {
             let mut frame = frame_id.frame;
             if frame_type == frame.frame_type {
@@ -147,7 +144,7 @@ impl ArgSchemeChecker {
     fn check_args_scheme<FIELDS: CallFields>(
         &self,
         fields: &FIELDS,
-    ) -> Result<ArgSchemeValue, CodecError> {
+    ) -> CodecResult<ArgSchemeValue> {
         let arg_scheme = get_args_scheme(fields)?;
         if arg_scheme != self.arg_scheme {
             return Err(CodecError::Error(format!(
@@ -160,7 +157,7 @@ impl ArgSchemeChecker {
     }
 }
 
-fn get_args_scheme<FIELDS: CallFields>(fields: &FIELDS) -> Result<ArgSchemeValue, CodecError> {
+fn get_args_scheme<FIELDS: CallFields>(fields: &FIELDS) -> CodecResult<ArgSchemeValue> {
     let headers = fields.headers();
     if let Some(scheme) = headers.get(TransportHeaderKey::ArgScheme.to_string().as_str()) {
         Ok(ArgSchemeValue::from_str(scheme)?)
@@ -172,7 +169,7 @@ fn get_args_scheme<FIELDS: CallFields>(fields: &FIELDS) -> Result<ArgSchemeValue
 async fn read_continuation(
     frame_input: &mut FrameInput,
     args_defragmenter: &mut ArgsDefragmenter,
-) -> Result<(), TChannelError> {
+) -> TResult<()> {
     while let Some(frame_id) = frame_input.recv().await {
         let mut frame = frame_id.frame;
         match frame.frame_type() {
@@ -203,7 +200,7 @@ async fn read_continuation(
     Ok(())
 }
 
-fn verify_args(call_args: &mut CallArgs) -> Result<&mut VecDeque<Option<Bytes>>, CodecError> {
+fn verify_args(call_args: &mut CallArgs) -> CodecResult<&mut VecDeque<Option<Bytes>>> {
     match call_args.checksum_type() {
         ChecksumType::None => Ok(call_args.args_mut()),
         _ => todo!(),
@@ -302,7 +299,7 @@ mod tests {
 
         // When
         let defragmenter = ResponseDefragmenter::new(receiver);
-        let response_res: Result<(ResponseCode, RawMessage), TChannelError> =
+        let response_res: TResult<(ResponseCode, RawMessage)> =
             block_on(defragmenter.read_response_msg());
 
         // Then
@@ -339,7 +336,7 @@ mod tests {
 
         // When
         let defragmenter = ResponseDefragmenter::new(receiver);
-        let response_res: Result<(ResponseCode, RawMessage), TChannelError> =
+        let response_res: TResult<(ResponseCode, RawMessage)> =
             block_on(defragmenter.read_response_msg());
 
         // Then
