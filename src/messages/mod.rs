@@ -10,6 +10,7 @@ use std::net::ToSocketAddrs;
 use std::pin::Pin;
 
 pub mod raw;
+#[cfg(feature = "thrift")]
 pub mod thrift;
 
 pub trait Message:

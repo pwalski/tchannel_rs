@@ -14,7 +14,7 @@ keywords = ["rpc", "protcol", "networking", "tokio", "uber"]
 getset = "0.1"
 derive_builder = "0.9"
 num-derive = "0.3"
-thrift = "0.15"
+thrift = { version = "0.15", optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "net"] }
 tokio-util = { version = "0.6", features = ["codec"] }
 tokio-stream = { version = "0.1", features = ["tokio-util"] }
@@ -42,3 +42,6 @@ opt-level = 0
 
 [profile.release]
 opt-level = 3
+
+[features]
+include-thrift = ["thrift"]
