@@ -1,6 +1,6 @@
 [package]
 name = "tchannel_protocol"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 authors = ["Przemysław Walski <pwalski@users.noreply.github.com>"]
 edition = "2018"
 repository = "https://github.com/pwalski/tchannel-rust"

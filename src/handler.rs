@@ -5,6 +5,8 @@ use futures::{future, Future};
 use std::fmt::Debug;
 use std::pin::Pin;
 
+pub type HandlerResult<MES> = Result<MES, HandlerError<MES>>;
+
 /// Trait for handling requests asynchronously.
 ///
 /// Handler can be registered under an `endpoint` name by calling [`SubChannel::register_async`] method.
@@ -76,7 +78,7 @@ fn convert<MSG: Message>(msg_res: HandlerResult<MSG>) -> MessageArgsResponse {
         Err(err) => match err {
             HandlerError::MessageError(message) => Ok((ResponseCode::Ok, message.try_into()?)),
             HandlerError::GeneralError(message) => Err(TChannelError::Error(message)),
-            HandlerError::TChannelError(err) => Err(err),
+            HandlerError::InternalError(err) => Err(err),
         },
     }
 }
@@ -91,5 +93,3 @@ impl<REQ: Message, RES: Message, HANDLER: RequestHandler<REQ = REQ, RES = RES>> 
         Box::pin(future::ready(self.handle(request_args)))
     }
 }
-
-pub type HandlerResult<MES> = Result<MES, HandlerError<MES>>;

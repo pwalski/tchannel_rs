@@ -32,12 +32,12 @@ impl ResponseFragmenter {
     }
 
     pub fn create_frames(self) -> TResult<TFrameStream> {
-        let fields = self.create_fields();
+        let fields = self.create_response_fields();
         self.fragmenter
             .create_frames(fields, Type::CallResponse, Type::CallResponseContinue)
     }
 
-    fn create_fields(&self) -> CallResponseFields {
+    fn create_response_fields(&self) -> CallResponseFields {
         let tracing = create_tracing();
         let headers = self.create_headers(); //TODO get rid of clones
         CallResponseFields::new(self.response_code, tracing, headers)

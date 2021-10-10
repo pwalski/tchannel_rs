@@ -72,7 +72,7 @@ pub enum ConnectionError {
 #[derive(Error, Debug, PartialEq)]
 pub enum HandlerError<RES: Message> {
     #[error(transparent)]
-    TChannelError(#[from] TChannelError),
+    InternalError(#[from] TChannelError),
 
     /// A general error.
     #[error("Handler error: {0}")]
@@ -138,5 +138,36 @@ impl From<SendError<TFrameId>> for ConnectionError {
             ),
             *err.0.id(),
         )
+    }
+}
+
+impl From<SendError<TFrameId>> for TChannelError {
+    fn from(err: SendError<TFrameId>) -> Self {
+        TChannelError::from(ConnectionError::from(err))
+    }
+}
+
+impl From<(u32, ConnectionError, Tracing)> for ConnectionError {
+    fn from((id, err, tracing): (u32, ConnectionError, Tracing)) -> Self {
+        match err {
+            ConnectionError::MessageErrorId(_, _) => err,
+            _ => {
+                let msg = ErrorMsg::new(ErrorCode::UnexpectedError, tracing, err.to_string());
+                ConnectionError::MessageErrorId(msg, id)
+            }
+        }
+    }
+}
+
+impl From<(u32, TChannelError, Tracing)> for TChannelError {
+    fn from((id, err, tracing): (u32, TChannelError, Tracing)) -> Self {
+        let connection_error = match err {
+            TChannelError::ConnectionError(err) => ConnectionError::from((id, err, tracing)),
+            err => {
+                let error_msg = ErrorMsg::new(ErrorCode::UnexpectedError, tracing, err.to_string());
+                ConnectionError::MessageErrorId(error_msg, id)
+            }
+        };
+        TChannelError::ConnectionError(connection_error)
     }
 }

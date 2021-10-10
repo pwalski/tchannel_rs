@@ -11,7 +11,6 @@ use crate::handler::{
 };
 use crate::messages::ResponseCode;
 use crate::messages::{Message, MessageArgs, MessageArgsResponse};
-use futures::join;
 use futures::StreamExt;
 use futures::{future, TryStreamExt};
 use log::{debug, error};
@@ -42,29 +41,38 @@ impl SubChannel {
         request: REQ,
         host: ADDR,
     ) -> HandlerResult<RES> {
-        match self.send_internal(request, host).await {
+        let (frames_in, frames_out) = self.create_frame_io(host).await?;
+        let response_res = self.send_internal(request, frames_in, &frames_out).await;
+        frames_out.close().await; //TODO still ugly
+        match response_res {
             Ok((code, response)) => match code {
                 ResponseCode::Ok => Ok(response),
                 ResponseCode::Error => Err(HandlerError::MessageError(response)),
             },
-            Err(err) => Err(HandlerError::TChannelError(err)),
+            Err(err) => Err(HandlerError::InternalError(err)),
         }
     }
 
-    pub(super) async fn send_internal<REQ: Message, RES: Message, ADDR: ToSocketAddrs>(
+    async fn create_frame_io<ADDR: ToSocketAddrs>(
+        &self,
+        host: ADDR,
+    ) -> TResult<(FrameInput, FrameOutput)> {
+        let host = first_addr(host)?;
+        Ok(self.connect(host).await?)
+    }
+
+    pub(super) async fn send_internal<REQ: Message, RES: Message>(
         &self,
         request: REQ,
-        host: ADDR,
+        frames_in: FrameInput,
+        frames_out: &FrameOutput,
     ) -> TResult<(ResponseCode, RES)> {
-        let host = first_addr(host)?;
-        let (connection_res, frames_res) =
-            join!(self.connect(host), self.create_frames(request.try_into()?));
-        let (frames_in, frames_out) = connection_res?;
-        send_frames(frames_res?, &frames_out).await?;
+        let frames = self.create_frames(request).await?;
+        send_frames(frames, frames_out).await?;
         let response = ResponseDefragmenter::new(frames_in)
             .read_response_msg()
             .await;
-        frames_out.close().await; //TODO ugly
+        frames_out.close().await; //TODO ugly and broken
         response
     }
 
@@ -134,8 +142,9 @@ impl SubChannel {
         Ok(connection.new_frames_io().await?)
     }
 
-    async fn create_frames(&self, request_args: MessageArgs) -> TResult<TFrameStream> {
-        RequestFragmenter::new(self.service_name.clone(), request_args).create_frames()
+    async fn create_frames<REQ: Message>(&self, request: REQ) -> TResult<TFrameStream> {
+        let message_args = request.try_into()?;
+        RequestFragmenter::new(self.service_name.clone(), message_args).create_frames()
     }
 
     pub(crate) async fn handle(&self, request: MessageArgs) -> MessageArgsResponse {
