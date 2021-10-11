@@ -1,6 +1,6 @@
 use crate::errors::CodecError;
 use crate::frames::headers::ArgSchemeValue;
-use crate::handler::Response;
+use crate::handler::HandlerResult;
 use crate::messages::{Message, MessageArgs, MessageChannel};
 use crate::subchannel::SubChannel;
 use bytes::{Buf, Bytes};
@@ -79,7 +79,7 @@ impl MessageChannel for SubChannel {
         &'a self,
         request: Self::REQ,
         host: ADDR,
-    ) -> Pin<Box<dyn Future<Output = Response<Self::RES>> + Send + '_>> {
+    ) -> Pin<Box<dyn Future<Output = HandlerResult<Self::RES>> + Send + '_>> {
         Box::pin(self.send(request, host))
     }
 }

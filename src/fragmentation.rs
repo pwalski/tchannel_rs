@@ -1,4 +1,4 @@
-use crate::errors::TChannelError;
+use crate::channel::TResult;
 use crate::fragmentation::FragmentationStatus::{CompleteAtTheEnd, Incomplete};
 use crate::frames::headers::TransportHeaderKey::CallerName;
 use crate::frames::headers::{ArgSchemeValue, TransportHeaderKey};
@@ -31,13 +31,13 @@ impl ResponseFragmenter {
         }
     }
 
-    pub fn create_frames(self) -> Result<TFrameStream, TChannelError> {
-        let fields = self.create_fields();
+    pub fn create_frames(self) -> TResult<TFrameStream> {
+        let fields = self.create_response_fields();
         self.fragmenter
             .create_frames(fields, Type::CallResponse, Type::CallResponseContinue)
     }
 
-    fn create_fields(&self) -> CallResponseFields {
+    fn create_response_fields(&self) -> CallResponseFields {
         let tracing = create_tracing();
         let headers = self.create_headers(); //TODO get rid of clones
         CallResponseFields::new(self.response_code, tracing, headers)
@@ -60,7 +60,7 @@ impl RequestFragmenter {
         RequestFragmenter { fragmenter }
     }
 
-    pub fn create_frames(self) -> Result<TFrameStream, TChannelError> {
+    pub fn create_frames(self) -> TResult<TFrameStream> {
         let fields = self.create_fields();
         self.fragmenter
             .create_frames(fields, Type::CallRequest, Type::CallRequestContinue)
@@ -110,7 +110,7 @@ impl Fragmenter {
         fields: FIELDS,
         first_type: Type,
         continuation_type: Type,
-    ) -> Result<TFrameStream, TChannelError> {
+    ) -> TResult<TFrameStream> {
         let fields_bytes = fields.encode_bytes()?;
         let payload_limit = calculate_payload_limit(fields_bytes.len());
         let frame_args = self.next_frame_args(payload_limit);

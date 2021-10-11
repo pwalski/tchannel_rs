@@ -1,4 +1,4 @@
-use crate::connection::{Config, Connection};
+use crate::connection::{Config, Connection, ConnectionResult};
 use crate::errors::ConnectionError;
 use crate::errors::ConnectionError::{MessageErrorId, UnexpectedResponseError};
 use crate::frames::payloads::ErrorMsg;
@@ -108,7 +108,7 @@ impl bb8::ManageConnection for ConnectionManager {
     }
 }
 
-async fn verify(connection: Connection) -> Result<Connection, ConnectionError> {
+async fn verify(connection: Connection) -> ConnectionResult<Connection> {
     let mut frame_id = init_handshake(&connection).await?;
     match frame_id.frame().frame_type() {
         Type::InitResponse => {
@@ -131,7 +131,7 @@ async fn verify(connection: Connection) -> Result<Connection, ConnectionError> {
     }
 }
 
-async fn init_handshake(connection: &Connection) -> Result<TFrameId, ConnectionError> {
+async fn init_handshake(connection: &Connection) -> ConnectionResult<TFrameId> {
     debug!("Init handshake.");
     let init = Init::default();
     //TODO add proper `crate::frames::headers::InitHeaderKey` headers
@@ -139,7 +139,7 @@ async fn init_handshake(connection: &Connection) -> Result<TFrameId, ConnectionE
     connection.send_one(init_frame).await
 }
 
-async fn ping(connection: &Connection) -> Result<(), ConnectionError> {
+async fn ping(connection: &Connection) -> ConnectionResult<()> {
     let ping_req = TFrame::new(Type::PingRequest, Bytes::new());
     connection
         .send_one(ping_req)

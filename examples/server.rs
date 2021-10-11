@@ -2,8 +2,7 @@ use log::{error, info};
 use std::ops::AddAssign;
 use std::time::Duration;
 use tchannel_protocol::errors::HandlerError;
-use tchannel_protocol::handler::RequestHandler;
-use tchannel_protocol::handler::Response;
+use tchannel_protocol::handler::{HandlerResult, RequestHandler};
 use tchannel_protocol::messages::raw::RawMessage;
 use tchannel_protocol::Config;
 use tchannel_protocol::TChannel;
@@ -39,7 +38,7 @@ impl RequestHandler for PongHandler {
     type REQ = RawMessage;
     type RES = RawMessage;
 
-    fn handle(&mut self, request: Self::REQ) -> Response<Self::RES> {
+    fn handle(&mut self, request: Self::REQ) -> HandlerResult<Self::RES> {
         info!("Received {:?}", request);
         self.counter.add_assign(1);
         if request.header() != "Marco" {

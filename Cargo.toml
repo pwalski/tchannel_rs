@@ -1,6 +1,6 @@
 [package]
 name = "tchannel_protocol"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 authors = ["Przemysław Walski <pwalski@users.noreply.github.com>"]
 edition = "2018"
 repository = "https://github.com/pwalski/tchannel-rust"
@@ -14,30 +14,34 @@ keywords = ["rpc", "protcol", "networking", "tokio", "uber"]
 getset = "0.1"
 derive_builder = "0.9"
 num-derive = "0.3"
-thrift = "0.13"
-tokio = { version = "1", features = ["full"] }
-tokio-util = { version = "0.6", features = ["full"] }
-tokio-stream = { version = "0.1" }
+thrift = { version = "0.15", optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "net"] }
+tokio-util = { version = "0.6", features = ["codec"] }
+tokio-stream = { version = "0.1", features = ["tokio-util"] }
 bb8 = "0.7"
-bytes = "1.0"
+bytes = "1.1"
 atoi = "0.4"
-num = "0.3"
+num = "0.4"
 num-traits = "0.2"
 async-trait = "0.1"
-strum = "0.20"
-strum_macros = "0.20"
+strum = "0.21"
+strum_macros = "0.21"
 thiserror = "1.0"
-bitflags = "1.0"
-futures = { version = "0.3", features = ["thread-pool"]}
+bitflags = "1.3"
+futures = { version = "0.3", features = ["std"]}
 log = "0.4"
 derive-new = "0.5"
 
 [dev-dependencies]
-tokio-test = "*"
-env_logger = "0.8.3"
+tokio-test = "0"
+tokio = { version = "1", features = ["macros"] }
+env_logger = "0.9"
 
 [profile.dev]
 opt-level = 0
 
 [profile.release]
 opt-level = 3
+
+[features]
+include-thrift = ["thrift"]

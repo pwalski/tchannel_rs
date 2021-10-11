@@ -1,6 +1,6 @@
 use crate::connection::pool::{ConnectionPools, ConnectionPoolsBuilder};
-use crate::connection::Config;
-use crate::errors::{ConnectionError, TChannelError};
+use crate::connection::{Config, ConnectionResult};
+use crate::errors::TChannelError;
 use crate::server::Server;
 use crate::SubChannel;
 use log::debug;
@@ -15,6 +15,10 @@ pub(crate) type SharedSubChannels = Arc<RwLock<HashMap<String, Arc<SubChannel>>>
 // Mutex to be Sync, Cell to get owned type on Drop impl TChannel, Option for lazy initialization.
 type OptionalRuntime = Mutex<Cell<Option<Runtime>>>;
 
+/// TChannel general result.
+pub type TResult<T> = Result<T, TChannelError>;
+
+/// TChannel protocol.
 pub struct TChannel {
     config: Arc<Config>,
     connection_pools: Arc<ConnectionPools>,
@@ -24,7 +28,7 @@ pub struct TChannel {
 
 impl TChannel {
     /// Initializes TChannel.
-    pub fn new(config: Config) -> Result<Self, TChannelError> {
+    pub fn new(config: Config) -> TResult<Self> {
         let config = Arc::new(config);
         let connection_pools = ConnectionPoolsBuilder::default()
             .config(config.clone())
@@ -39,19 +43,23 @@ impl TChannel {
     }
 
     /// Starts server
-    pub fn start_server(&mut self) -> Result<(), ConnectionError> {
+    pub fn start_server(&mut self) -> TResult<()> {
         let mut runtime_lock = self.server_runtime.lock().unwrap();
         if runtime_lock.get_mut().is_none() {
             debug!("Server runtime is alive"); //TODO lie
-            let runtime = tokio::runtime::Builder::new_multi_thread()
-                .enable_io()
-                .max_blocking_threads(self.config.max_server_threads)
-                .thread_name("tchannel_server")
-                .build()?;
+            let runtime = self.create_runtime()?;
             runtime.spawn(Server::run(self.config.clone(), self.subchannels.clone()));
             runtime_lock.set(Some(runtime));
         }
         Ok(())
+    }
+
+    fn create_runtime(&self) -> ConnectionResult<Runtime> {
+        Ok(tokio::runtime::Builder::new_multi_thread()
+            .enable_io()
+            .max_blocking_threads(self.config.max_server_threads)
+            .thread_name("tchannel_server")
+            .build()?)
     }
 
     pub fn shutdown_server(&self) {
@@ -67,10 +75,7 @@ impl TChannel {
         }
     }
 
-    pub async fn subchannel<STR: AsRef<str>>(
-        &self,
-        service_name: STR,
-    ) -> Result<Arc<SubChannel>, TChannelError> {
+    pub async fn subchannel<STR: AsRef<str>>(&self, service_name: STR) -> TResult<Arc<SubChannel>> {
         if let Some(subchannel) = self.subchannels.read().await.get(service_name.as_ref()) {
             return Ok(subchannel.clone());
         }
@@ -80,7 +85,7 @@ impl TChannel {
     async fn create_subchannel<STR: AsRef<str>>(
         &self,
         service_name: STR,
-    ) -> Result<Arc<SubChannel>, TChannelError> {
+    ) -> TResult<Arc<SubChannel>> {
         let mut subchannels = self.subchannels.write().await;
         match subchannels.get(service_name.as_ref()) {
             Some(subchannel) => Ok(subchannel.clone()),

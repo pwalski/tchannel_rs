@@ -1,6 +1,5 @@
-pub mod pool;
-
-use crate::errors::{CodecError, ConnectionError};
+use crate::errors::ConnectionError;
+use crate::frames::payloads::CodecResult;
 use crate::frames::{TFrame, TFrameId, TFrameIdCodec};
 use core::time::Duration;
 use futures::prelude::*;
@@ -21,6 +20,10 @@ use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::codec::{FramedRead, FramedWrite};
+
+pub mod pool;
+
+pub type ConnectionResult<T> = Result<T, ConnectionError>;
 
 #[derive(Debug, Builder)]
 pub struct Config {
@@ -55,7 +58,7 @@ pub struct FrameOutput {
 }
 
 impl FrameOutput {
-    pub async fn send(&self, frame: TFrame) -> Result<(), ConnectionError> {
+    pub async fn send(&self, frame: TFrame) -> ConnectionResult<()> {
         let frame = TFrameId::new(self.message_id, frame);
         debug!("Passing frame {:?} to sender.", frame);
         Ok(self.sender.send(frame).await?)
@@ -79,7 +82,7 @@ pub struct FramesDispatcher {
 impl FramesDispatcher {
     /// Dispatches frame to channel.
     /// Returns `Receiver` of new channel if it got created for given frame.
-    pub async fn dispatch(&self, frame: TFrameId) -> Result<Option<FrameInput>, ConnectionError> {
+    pub async fn dispatch(&self, frame: TFrameId) -> ConnectionResult<Option<FrameInput>> {
         let senders = self.senders.read().await;
         if let Some(sender) = senders.get(frame.id()) {
             return Ok(sender.send(frame).map_ok(|_| None).await?);
@@ -94,7 +97,7 @@ impl FramesDispatcher {
         channels.remove(id)
     }
 
-    pub async fn register(&self, id: u32, sender: Sender<TFrameId>) -> Result<(), ConnectionError> {
+    pub async fn register(&self, id: u32, sender: Sender<TFrameId>) -> ConnectionResult<()> {
         let mut channels = self.senders.write().await;
         if channels.insert(id, sender).is_some() {
             debug!("Duplicated sender for id: {}", id);
@@ -103,7 +106,7 @@ impl FramesDispatcher {
         Ok(())
     }
 
-    async fn dispatch_first(&self, frame: TFrameId) -> Result<Receiver<TFrameId>, ConnectionError> {
+    async fn dispatch_first(&self, frame: TFrameId) -> ConnectionResult<Receiver<TFrameId>> {
         let id = *frame.id();
         debug!("Received frame with id: {}", id);
         let mut senders = self.senders.write().await;
@@ -117,7 +120,7 @@ impl FramesDispatcher {
         Ok(receiver)
     }
 
-    pub async fn dispatch_following(&self, frame: TFrameId) -> Result<(), ConnectionError> {
+    pub async fn dispatch_following(&self, frame: TFrameId) -> ConnectionResult<()> {
         let id = *frame.id();
         debug!("Received frame with id: {}", id);
         let senders = self.senders.read().await;
@@ -146,10 +149,7 @@ impl Connection {
         }
     }
 
-    pub async fn connect(
-        stream: TcpStream,
-        buffer_size: usize,
-    ) -> Result<Connection, ConnectionError> {
+    pub async fn connect(stream: TcpStream, buffer_size: usize) -> ConnectionResult<Connection> {
         let (read, write) = stream.into_split();
         let framed_read = FramedRead::new(read, TFrameIdCodec {});
         let framed_write = FramedWrite::new(write, TFrameIdCodec {});
@@ -161,7 +161,7 @@ impl Connection {
     }
 
     /// Prepares frame I/O with new message id. Then sends `frame` and awaits for response.
-    pub async fn send_one(&self, frame: TFrame) -> Result<TFrameId, ConnectionError> {
+    pub async fn send_one(&self, frame: TFrame) -> ConnectionResult<TFrameId> {
         let (mut frame_input, frame_output) = self.new_frames_io().await?;
         frame_output.send(frame).await?;
         let response = frame_input.recv().await;
@@ -171,7 +171,7 @@ impl Connection {
 
     /// Prepares frame I/O with new message id.
     /// Then returns both input and output which allows to send multiple frames with same message id.
-    pub async fn new_frames_io(&self) -> Result<(FrameInput, FrameOutput), ConnectionError> {
+    pub async fn new_frames_io(&self) -> ConnectionResult<(FrameInput, FrameOutput)> {
         let message_id = self.next_message_id();
         let (sender, receiver) = mpsc::channel::<TFrameId>(self.buffer_size); //TODO should use bufer_size?
         self.pending_ids.register(message_id, sender).await?;
@@ -259,7 +259,7 @@ impl FrameReceiver {
     }
 
     fn print_if_err_and_skip(
-        frame_res: Result<TFrameId, CodecError>,
+        frame_res: CodecResult<TFrameId>,
     ) -> impl Future<Output = Option<TFrameId>> {
         match frame_res {
             Ok(frame) => future::ready(Some(frame)),
@@ -270,7 +270,7 @@ impl FrameReceiver {
         }
     }
 
-    async fn print_if_err(some_res: impl Future<Output = Result<(), ConnectionError>>) {
+    async fn print_if_err(some_res: impl Future<Output = ConnectionResult<()>>) {
         if let Some(err) = some_res.await.err() {
             error!("Failed to send frame: {:?}", err);
         }
