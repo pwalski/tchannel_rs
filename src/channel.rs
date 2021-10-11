@@ -4,16 +4,15 @@ use crate::errors::TChannelError;
 use crate::server::Server;
 use crate::SubChannel;
 use log::debug;
-use std::cell::Cell;
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
-use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
 
 pub(crate) type SharedSubChannels = Arc<RwLock<HashMap<String, Arc<SubChannel>>>>;
 // Mutex to be Sync, Cell to get owned type on Drop impl TChannel, Option for lazy initialization.
-type OptionalRuntime = Mutex<Cell<Option<Runtime>>>;
+type ServerHandle = Mutex<Option<JoinHandle<ConnectionResult<()>>>>;
 
 /// TChannel general result.
 pub type TResult<T> = Result<T, TChannelError>;
@@ -23,7 +22,7 @@ pub struct TChannel {
     config: Arc<Config>,
     connection_pools: Arc<ConnectionPools>,
     subchannels: SharedSubChannels,
-    server_runtime: OptionalRuntime,
+    server_handle: ServerHandle,
 }
 
 impl TChannel {
@@ -38,40 +37,37 @@ impl TChannel {
             config,
             connection_pools: Arc::new(connection_pools),
             subchannels,
-            server_runtime: Mutex::new(Cell::new(None)),
+            server_handle: Mutex::new(None),
         })
     }
 
     /// Starts server
     pub fn start_server(&mut self) -> TResult<()> {
-        let mut runtime_lock = self.server_runtime.lock().unwrap();
-        if runtime_lock.get_mut().is_none() {
-            debug!("Server runtime is alive"); //TODO lie
-            let runtime = self.create_runtime()?;
-            runtime.spawn(Server::run(self.config.clone(), self.subchannels.clone()));
-            runtime_lock.set(Some(runtime));
+        let mut handle_lock = self.server_handle.lock().unwrap();
+        if handle_lock.is_none() {
+            debug!("Starting server"); //TODO lie
+            let handle = tokio::spawn(Server::run(self.config.clone(), self.subchannels.clone()));
+            *handle_lock = Some(handle);
+        } else {
+            return Err(TChannelError::Error("Server already started".to_string()));
         }
         Ok(())
     }
 
-    fn create_runtime(&self) -> ConnectionResult<Runtime> {
-        Ok(tokio::runtime::Builder::new_multi_thread()
-            .enable_io()
-            .max_blocking_threads(self.config.max_server_threads)
-            .thread_name("tchannel_server")
-            .build()?)
-    }
-
-    pub fn shutdown_server(&self) {
-        let runtime_lock = self.server_runtime.lock().unwrap();
+    pub fn shutdown_server(&mut self) {
+        //TODO new error type?
+        let mut handle_lock = self
+            .server_handle
+            .lock()
+            .expect("Cannot lock on server task handle.");
         //TODO dirty workaround for ability to shutdown Runtime having only &self (Drop impl).
-        if let Some(runtime) = runtime_lock.replace(None) {
-            debug!("Stopping server");
-            runtime.shutdown_timeout(Duration::from_millis(100));
-            // runtime.shutdown_background();
-            debug!("Server stopped");
+        if let Some(handle) = handle_lock.deref() {
+            info!("Stopping server");
+            //TODO timeout?
+            handle.abort();
+            *handle_lock = None;
         } else {
-            debug!("Server runtime stopped. Nothing to do.");
+            debug!("Server already stopped. Nothing to do.");
         }
     }
 

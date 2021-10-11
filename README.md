@@ -41,13 +41,8 @@ use tchannel_protocol::messages::MessageChannel;
 use tchannel_protocol::messages::raw::RawMessage;
 use tokio::runtime::Runtime;
 
+#[tokio::main]
 fn main() -> TResult<()> {
-    let tserver = Runtime::new().unwrap().block_on(run())?;
-    // Shutdown outside of async
-    Ok(tserver.shutdown_server())
-}
-
-async fn run() -> TResult<TChannel> {
     // Server
     let mut tserver = TChannel::new(Config::default())?;
     let subchannel = tserver.subchannel("service".to_string()).await?;
@@ -60,11 +55,14 @@ async fn run() -> TResult<TChannel> {
     let request = RawMessage::new("endpoint".into(), "a".into(), "b".into());
     let response_res = subchannel.send(request, "127.0.0.1:8888").await;
 
+    // Server shutdown
+    tserver.shutdown_server();
+
     assert!(response_res.is_ok());
     let response = response_res.unwrap();
     assert_eq!("a", response.header());
     assert_eq!("y".as_bytes(), response.body().as_ref());
-    Ok(tserver)
+    Ok(())
 }
 
 #[derive(Debug)]
