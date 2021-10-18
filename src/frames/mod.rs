@@ -4,6 +4,7 @@ pub mod payloads;
 use crate::errors::CodecError;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::Stream;
+use std::io::Cursor;
 use std::pin::Pin;
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -82,6 +83,7 @@ impl Encoder<TFrameId> for TFrameIdCodec {
     fn encode(&mut self, item: TFrameId, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let frame = item.frame();
         let len = frame.size() as u16 + FRAME_HEADER_LENGTH;
+        trace!("Encoding TFrame (id {}, len {})", item.id(), frame.size());
         dst.reserve(len as usize);
         dst.put_u16(len);
         dst.put_u8(*frame.frame_type() as u8);
@@ -100,8 +102,7 @@ impl Decoder for TFrameIdCodec {
     type Error = crate::errors::CodecError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        if src.is_empty() {
-            debug!("Empty bytes src");
+        if Self::is_buffering(src) {
             return Ok(None);
         }
         let size = src.get_u16();
@@ -127,5 +128,23 @@ impl Decoder for TFrameIdCodec {
             payload,
         };
         Ok(Some(TFrameId { id, frame }))
+    }
+}
+
+impl TFrameIdCodec {
+    fn is_buffering(src: &mut BytesMut) -> bool {
+        if src.len() < 2 {
+            trace!("Cannot read length.");
+            src.reserve(2 - src.len()); // Minimal required to read frame length
+            return true;
+        }
+        let mut peeker = Cursor::new(&src[..2]);
+        let size = peeker.get_u16() as usize;
+        if size > src.len() {
+            trace!("Buffering frame.");
+            src.reserve(size + 2); // Extra 2 bytes will allow to read next frame length
+            return true;
+        }
+        false
     }
 }

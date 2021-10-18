@@ -7,11 +7,12 @@ use bytes::{Buf, Bytes};
 use futures::Future;
 use std::collections::VecDeque;
 use std::convert::{TryFrom, TryInto};
+use std::fmt::{Display, Formatter};
 use std::net::ToSocketAddrs;
 use std::pin::Pin;
 use std::string::FromUtf8Error;
 
-#[derive(Default, Debug, Builder, Getters, MutGetters, new)]
+#[derive(Default, Debug, Clone, Builder, Getters, MutGetters, new)]
 #[builder(pattern = "owned")]
 pub struct RawMessage {
     //arg1
@@ -26,7 +27,15 @@ pub struct RawMessage {
     body: Bytes,
 }
 
-impl RawMessage {}
+impl Display for RawMessage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Endpoint: '{}', Header: '{}', Body: '{:?}'",
+            self.endpoint, self.header, self.body
+        )
+    }
+}
 
 impl TryFrom<MessageArgs> for RawMessage {
     type Error = CodecError;

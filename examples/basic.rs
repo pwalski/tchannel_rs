@@ -8,7 +8,7 @@ use tchannel_protocol::{Config, TChannel};
 #[tokio::main]
 async fn main() -> TResult<()> {
     // Server
-    let mut tserver = TChannel::new(Config::default())?;
+    let tserver = TChannel::new(Config::default())?;
     let subchannel = tserver.subchannel("service".to_string()).await?;
     subchannel.register("endpoint", Handler {}).await?;
     tserver.start_server()?;

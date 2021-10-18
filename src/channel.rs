@@ -41,8 +41,8 @@ impl TChannel {
         })
     }
 
-    /// Starts server
-    pub fn start_server(&mut self) -> TResult<()> {
+    /// Starts server task.
+    pub fn start_server(&self) -> TResult<()> {
         let mut handle_lock = self.server_handle.lock().unwrap();
         if handle_lock.is_none() {
             debug!("Starting server"); //TODO lie
@@ -54,7 +54,8 @@ impl TChannel {
         Ok(())
     }
 
-    pub fn shutdown_server(&mut self) {
+    /// Stops server task.
+    pub fn shutdown_server(&self) {
         //TODO new error type?
         let mut handle_lock = self
             .server_handle
@@ -71,6 +72,7 @@ impl TChannel {
         }
     }
 
+    /// Gets subchannel for given `service_name`. If not found a new instance is created.
     pub async fn subchannel<STR: AsRef<str>>(&self, service_name: STR) -> TResult<Arc<SubChannel>> {
         if let Some(subchannel) = self.subchannels.read().await.get(service_name.as_ref()) {
             return Ok(subchannel.clone());

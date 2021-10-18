@@ -34,7 +34,7 @@ impl ResponseDefragmenter {
         let (fields, message_args) = self
             .defragmenter
             .read_and_check(Type::CallResponse, CallResponse::decode, |fields| {
-                ArgSchemeChecker::new(MSG::args_scheme()).check_args_scheme(fields)
+                ArgSchemeChecker::new(MSG::args_scheme()).check(fields)
             })
             .await?;
         let msg = MSG::try_from(message_args)?;
@@ -61,13 +61,10 @@ impl RequestDefragmenter {
 
     #[allow(dead_code)]
     pub async fn read_request_msg<MSG: Message>(self) -> TResult<MSG> {
-        let _checker = ArgSchemeChecker {
-            arg_scheme: MSG::args_scheme(),
-        };
         let (_, message_args) = self
             .defragmenter
             .read_and_check(Type::CallRequest, CallRequest::decode, |fields| {
-                ArgSchemeChecker::new(MSG::args_scheme()).check_args_scheme(fields)
+                ArgSchemeChecker::new(MSG::args_scheme()).check(fields)
             })
             .await?;
         Ok(MSG::try_from(message_args)?)
@@ -83,9 +80,9 @@ impl Defragmenter {
     async fn read<FIELDS: CallFields, FRAME: Codec + Call<FIELDS>>(
         self,
         frame_type: Type,
-        decoder: fn(src: &mut Bytes) -> CodecResult<FRAME>,
+        decode: fn(src: &mut Bytes) -> CodecResult<FRAME>,
     ) -> TResult<(FIELDS, MessageArgs)> {
-        self.read_and_check(frame_type, decoder, get_args_scheme)
+        self.read_and_check(frame_type, decode, get_args_scheme)
             .await
     }
 
@@ -112,13 +109,14 @@ impl Defragmenter {
     async fn read_beginning<FIELDS: CallFields, FRAME: Codec + Call<FIELDS>>(
         &mut self,
         frame_type: Type,
-        decoder: fn(src: &mut Bytes) -> CodecResult<FRAME>,
+        decode: fn(src: &mut Bytes) -> CodecResult<FRAME>,
         args_defragmenter: &mut ArgsDefragmenter,
     ) -> TResult<(FIELDS, Flags)> {
         if let Some(frame_id) = self.frame_input.recv().await {
+            debug!("Reading beginning frame {}", frame_id.id());
             let mut frame = frame_id.frame;
             if frame_type == frame.frame_type {
-                let mut frame = decoder(frame.payload_mut())?; //ugh
+                let mut frame = decode(frame.payload_mut())?; //ugh
                 verify_args(frame.args()).map(|args| args_defragmenter.add(args))?;
                 let flags = frame.flags();
                 Ok((frame.fields(), flags))
@@ -141,10 +139,7 @@ struct ArgSchemeChecker {
 }
 
 impl ArgSchemeChecker {
-    fn check_args_scheme<FIELDS: CallFields>(
-        &self,
-        fields: &FIELDS,
-    ) -> CodecResult<ArgSchemeValue> {
+    pub fn check<FIELDS: CallFields>(&self, fields: &FIELDS) -> CodecResult<ArgSchemeValue> {
         let arg_scheme = get_args_scheme(fields)?;
         if arg_scheme != self.arg_scheme {
             return Err(CodecError::Error(format!(
@@ -170,14 +165,15 @@ async fn read_continuation(
     frame_input: &mut FrameInput,
     args_defragmenter: &mut ArgsDefragmenter,
 ) -> TResult<()> {
+    debug!("Reading continuation");
     while let Some(frame_id) = frame_input.recv().await {
         let mut frame = frame_id.frame;
         match frame.frame_type() {
             Type::CallResponseContinue | Type::CallRequestContinue => {
+                debug!("Reading frame with type {:?}", frame.frame_type());
                 let mut continuation = CallContinue::decode(frame.payload_mut())?;
-                let more_follows = continuation.flags().contains(Flags::MORE_FRAGMENTS_FOLLOW); //TODO workaround for borrow checker
                 verify_args(continuation.args_mut()).map(|args| args_defragmenter.add(args))?;
-                if more_follows {
+                if !continuation.flags().contains(Flags::MORE_FRAGMENTS_FOLLOW) {
                     break;
                 }
             }
@@ -257,6 +253,8 @@ impl ArgsDefragmenter {
     }
 }
 
+// Tests
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -279,7 +277,7 @@ mod tests {
 
     #[test]
     fn single_frame() {
-        // Given
+        // GIVEN
         let args: Vec<Option<Bytes>> = ["e", "h", "b"]
             .to_vec()
             .into_iter()
@@ -297,12 +295,12 @@ mod tests {
         let send_result = block_on(sender.send(frame_id));
         assert_ok!(send_result);
 
-        // When
+        // WHEN
         let defragmenter = ResponseDefragmenter::new(receiver);
         let response_res: TResult<(ResponseCode, RawMessage)> =
             block_on(defragmenter.read_response_msg());
 
-        // Then
+        // THEN
         // assert_ok!(&response_res);
         let (code, response) = response_res.unwrap();
         assert_eq!(ResponseCode::Ok, code);
@@ -319,7 +317,7 @@ mod tests {
 
     #[test]
     fn wrong_frame() {
-        // Given
+        // GIVEN
         let args = [Bytes::from("a"), Bytes::from("b"), Bytes::from("c")].to_vec();
         let some_args: Vec<Option<Bytes>> = args.into_iter().map(Some).collect();
         let call_args = CallArgs::new(ChecksumType::None, None, VecDeque::from(some_args));
@@ -334,22 +332,17 @@ mod tests {
         let send_result = block_on(sender.send(frame_id));
         assert_ok!(send_result);
 
-        // When
+        // WHEN
         let defragmenter = ResponseDefragmenter::new(receiver);
         let response_res: TResult<(ResponseCode, RawMessage)> =
             block_on(defragmenter.read_response_msg());
 
-        // Then
+        // THEN
         assert!(response_res.is_err());
         let res = response_res.err().unwrap();
         assert_eq!(
             TChannelError::Error("Expected 'CallResponse' got 'CallRequest'".to_string()),
             res
         );
-    }
-
-    #[test]
-    fn multiple_frames() {
-        //TODO sigh
     }
 }
