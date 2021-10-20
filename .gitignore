@@ -1,11 +1,10 @@
 **/.DS_Store
 .idea
-tchannel-rust.iml
-examples-server/tchannel-example.iml
-target/
-examples-server/target/
-examples-server/.idea/
-src/gen
+tchannel-rs.iml
+examples-jvm-server/tchannel-jvm-server.iml
+examples-jvm-server/.idea/
+examples-jvm-server/target/
 tchannel/pkg
-examples-server/src/server.iml
+target/
+src/gen
 out/

@@ -1,11 +1,11 @@
 [package]
 name = "tchannel_protocol"
 version = "0.1.0-alpha.1"
-authors = ["Przemysław Walski <pwalski@users.noreply.github.com>"]
+authors = ["Przemysław Walski <pwalski.dev@gmail.com>"]
 edition = "2018"
 repository = "https://github.com/pwalski/tchannel-rust"
 readme = "README.md"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 keywords = ["rpc", "protcol", "networking", "tokio", "uber"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
