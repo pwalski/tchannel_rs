@@ -78,16 +78,15 @@ impl RequestHandler for Handler {
 }
 ```
 
-
 ## Build
 
-Update of README
+### Update of README.md
 ```shell
 cargo install cargo-readme
 cargo readme > README.md
 ```
 
-## Examples Subproject
+### Examples Subproject
 
 Sample server:
 ```shell
@@ -102,6 +101,8 @@ RUST_LOG=DEBUG cargo run --example client
 Sample `tchannel-java` server (to check Rust client compatibility):
 ```shell
 mvn -f examples-jvm-server package exec:exec -Pserver
+# or with Docker
+docker-compose --project-directory examples-jvm-server up
 ```
 
 ---
