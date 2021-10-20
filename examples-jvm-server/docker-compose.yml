@@ -1,0 +1,7 @@
+version: "3.9"
+
+services:
+  tchannel-jvm-server:
+    build: .
+    ports:
+      - "8888:8888"

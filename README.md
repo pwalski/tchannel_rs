@@ -1,4 +1,5 @@
-[![build status](https://github.com/pwalski/tchannel-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/pwalski/tchannel-rust/actions)
+[![build status](https://github.com/pwalski/tchannel-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/pwalski/tchannel-rs/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE.md)
 
 # tchannel_protocol
 
@@ -41,13 +42,8 @@ use tchannel_protocol::messages::MessageChannel;
 use tchannel_protocol::messages::raw::RawMessage;
 use tokio::runtime::Runtime;
 
-fn main() -> TResult<()> {
-    let tserver = Runtime::new().unwrap().block_on(run())?;
-    // Shutdown outside of async
-    Ok(tserver.shutdown_server())
-}
-
-async fn run() -> TResult<TChannel> {
+#[tokio::main]
+async fn main() -> TResult<()> {
     // Server
     let mut tserver = TChannel::new(Config::default())?;
     let subchannel = tserver.subchannel("service".to_string()).await?;
@@ -60,11 +56,14 @@ async fn run() -> TResult<TChannel> {
     let request = RawMessage::new("endpoint".into(), "a".into(), "b".into());
     let response_res = subchannel.send(request, "127.0.0.1:8888").await;
 
+    // Server shutdown
+    tserver.shutdown_server();
+
     assert!(response_res.is_ok());
     let response = response_res.unwrap();
     assert_eq!("a", response.header());
     assert_eq!("y".as_bytes(), response.body().as_ref());
-    Ok(tserver)
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -79,25 +78,19 @@ impl RequestHandler for Handler {
 }
 ```
 
-
 ## Build
 
-Update of README
+### Update of README.md
 ```shell
 cargo install cargo-readme
 cargo readme > README.md
 ```
 
-## Examples Subproject
+### Examples Subproject
 
 Sample server:
 ```shell
 RUST_LOG=DEBUG cargo run --example server
-```
-
-Sample `tchannel-java` server:
-```shell
-mvn -f examples-server package exec:exec -Pserver
 ```
 
 Sample client:
@@ -105,6 +98,13 @@ Sample client:
 RUST_LOG=DEBUG cargo run --example client
 ```
 
+Sample `tchannel-java` server (to check Rust client compatibility):
+```shell
+mvn -f examples-jvm-server package exec:exec -Pserver
+# or with Docker
+docker-compose --project-directory examples-jvm-server up
+```
+
 ---
 
-License: MIT OR Apache-2.0
+License: MIT

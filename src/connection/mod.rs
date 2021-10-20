@@ -32,7 +32,7 @@ pub struct Config {
     pub(crate) test_connection: bool,
     pub(crate) frame_buffer_size: usize,
     pub(crate) server_address: SocketAddr,
-    pub(crate) max_server_threads: usize,
+    pub(crate) server_tasks: usize,
 }
 
 impl Default for Config {
@@ -42,8 +42,8 @@ impl Default for Config {
             lifetime: Some(Duration::from_secs(60)),
             test_connection: false,
             frame_buffer_size: 100,
-            server_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8888),
-            max_server_threads: 1,
+            server_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 8888),
+            server_tasks: 4,
         }
     }
 }
@@ -60,7 +60,7 @@ pub struct FrameOutput {
 impl FrameOutput {
     pub async fn send(&self, frame: TFrame) -> ConnectionResult<()> {
         let frame = TFrameId::new(self.message_id, frame);
-        debug!("Passing frame {:?} to sender.", frame);
+        trace!("Passing frame {:?} to sender.", frame);
         Ok(self.sender.send(frame).await?)
     }
 
@@ -85,6 +85,7 @@ impl FramesDispatcher {
     pub async fn dispatch(&self, frame: TFrameId) -> ConnectionResult<Option<FrameInput>> {
         let senders = self.senders.read().await;
         if let Some(sender) = senders.get(frame.id()) {
+            debug!("Dispatching frame (id {}) to found sender.", frame.id());
             return Ok(sender.send(frame).map_ok(|_| None).await?);
         }
         std::mem::drop(senders);
@@ -100,7 +101,7 @@ impl FramesDispatcher {
     pub async fn register(&self, id: u32, sender: Sender<TFrameId>) -> ConnectionResult<()> {
         let mut channels = self.senders.write().await;
         if channels.insert(id, sender).is_some() {
-            debug!("Duplicated sender for id: {}", id);
+            debug!("Sender for id {} already exists", id);
             return Err(ConnectionError::Error(format!("Duplicated id: {}.", id)));
         }
         Ok(())
