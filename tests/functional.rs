@@ -5,10 +5,11 @@ extern crate log;
 extern crate serial_test;
 
 use bytes::Bytes;
+use std::sync::Arc;
 use tchannel_protocol::handler::{HandlerResult, RequestHandler};
 use tchannel_protocol::messages::raw::RawMessage;
 use tchannel_protocol::messages::MessageChannel;
-use tchannel_protocol::{Config, TChannel, TResult};
+use tchannel_protocol::{Config, SubChannel, TChannel, TResult};
 use test_case::test_case;
 
 #[test_case("service", "endpoint", "header", "body";    "Basic")]
@@ -29,12 +30,12 @@ async fn single_frame_msg(
 }
 
 #[test_case("service", "from_v(&['a' as u8; u16::MAX as usize * 10])", "header", "body";        "Long endpoint/arg1")]
-#[test_case("service", "endpoint", from_v(&[b'b'; u16::MAX as usize * 10]), "body";        "Long header/arg2")]
+#[test_case("service", "endpoint", from_v(&[b'b'; u16::MAX as usize * 10]), "body";             "Long header/arg2")]
 #[test_case("service", "endpoint", "header", "from_v(&['c' as u8; u16::MAX as usize * 10])";    "Long body/arg3")]
-#[test_case("service", 
-        "from_v(&['a' as u8; u16::MAX as usize * 10])", 
-        "from_v(&['b' as u8; u16::MAX as usize * 10])", 
-        "from_v(&['c' as u8; u16::MAX as usize * 10])";    
+#[test_case("service",
+        "from_v(&['a' as u8; u16::MAX as usize * 10])",
+        "from_v(&['b' as u8; u16::MAX as usize * 10])",
+        "from_v(&['c' as u8; u16::MAX as usize * 10])";
         "Long all args")]
 #[serial]
 #[tokio::test]
@@ -55,7 +56,7 @@ async fn echo_test(
 ) -> Result<(), anyhow::Error> {
     // GIVEN
     let _ = env_logger::builder().is_test(true).try_init();
-    let server = start_echo_server(service.to_string(), endpoint.to_string()).await?;
+    let server = start_echo_server(service, endpoint).await?;
     let req = RawMessage::new(
         endpoint.to_string(),
         header.to_string(),
@@ -77,6 +78,60 @@ async fn echo_test(
     Ok(())
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[serial]
+async fn parallel_messages() -> Result<(), anyhow::Error> {
+    let service = "service";
+    let endpoint = "endpoint";
+    let server = start_echo_server(service, endpoint).await?;
+    let client = TChannel::new(Config::default())?;
+    let subchannel = client.subchannel(&service).await?;
+
+    let small_msgs = (0..50)
+        .map(|i| {
+            RawMessage::new(
+                endpoint.to_string(),
+                format!("header-{}", i),
+                Bytes::from(format!("body-{}", i)),
+            )
+        })
+        .collect::<Vec<RawMessage>>();
+    let large_msgs = (0..5 as u8)
+        .map(|i| {
+            RawMessage::new(
+                endpoint.to_string(),
+                from_v(&[i as u8; u16::MAX as usize * 20]).to_string(),
+                Bytes::from(from_v(&[i + 5 as u8; u16::MAX as usize * 10]).to_string()),
+            )
+        })
+        .collect::<Vec<RawMessage>>();
+
+    let (small, large) = tokio::join!(
+        tokio::spawn(send_msgs(subchannel.clone(), small_msgs)),
+        tokio::spawn(send_msgs(subchannel.clone(), large_msgs))
+    );
+
+    assert!(small.is_ok());
+    assert!(large.is_ok());
+    server.shutdown_server();
+    Ok(())
+}
+
+async fn send_msgs(
+    subchannel: Arc<SubChannel>,
+    msgs: Vec<RawMessage>,
+) -> Result<(), anyhow::Error> {
+    for req in msgs {
+        debug!("Sending {} bytes.", &req.header().len() + &req.body().len());
+        let res = subchannel.send(req.clone(), &LOCAL_SERVER).await?;
+        assert_eq!(req.endpoint(), res.endpoint(), "Endpoints should match");
+        assert_eq!(req.header(), res.header(), "Header fields should match");
+        assert_eq!(req.body(), res.body(), "Body fields should match");
+        debug!("Sent");
+    }
+    Ok(())
+}
+
 async fn start_echo_server<STR: AsRef<str>>(service: STR, endpoint: STR) -> TResult<TChannel> {
     let server = TChannel::new(Config::default())?;
     let subchannel = server.subchannel(&service).await?;
@@ -89,7 +144,7 @@ async fn make_request<STR: AsRef<str>>(service: STR, req: RawMessage) -> Handler
     debug!("Outgoing arg2/header len {}", &req.header().len());
     let client = TChannel::new(Config::default())?;
     let subchannel = client.subchannel(service).await?;
-    subchannel.send(req, "127.0.0.1:8888").await
+    subchannel.send(req, LOCAL_SERVER).await
 }
 
 #[derive(Debug)]
@@ -105,6 +160,8 @@ impl RequestHandler for EchoHandler {
 }
 
 // Utils
+
+const LOCAL_SERVER: &str = "127.0.0.1:8888";
 
 fn from_v(v: &[u8]) -> &str {
     std::str::from_utf8(v).unwrap()
