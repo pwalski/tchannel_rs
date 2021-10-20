@@ -21,7 +21,7 @@ public final class SyncServer {
 
     protected static TChannel createServer() throws Exception {
         TChannel tchannel = new TChannel.Builder("server")
-                .setServerHost(InetAddress.getByAddress(new byte[] {127,0,0,1}))
+                .setServerHost(InetAddress.getByAddress(new byte[] {0,0,0,0}))
                 .setServerPort(8888)
                 .build();
         tchannel.makeSubChannel("server")

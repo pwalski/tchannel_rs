@@ -42,7 +42,7 @@ impl Default for Config {
             lifetime: Some(Duration::from_secs(60)),
             test_connection: false,
             frame_buffer_size: 100,
-            server_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8888),
+            server_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 8888),
             server_tasks: 4,
         }
     }
