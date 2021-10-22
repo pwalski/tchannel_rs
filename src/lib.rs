@@ -1,9 +1,5 @@
 //! TChannel is a network multiplexing and framing RPC protocol created by Uber ([protocol specs](https://github.com/uber/tchannel/blob/master/docs/protocol.md)).
 //!
-//! ### Disclaimer
-//!
-//! The project serves as an excuse to learn Rust therefore the implementation may be suboptimal and features are not tested properly.
-//!
 //! ## Overview
 //!
 //! Features of TChannel protocol implemented so far:
@@ -29,6 +25,13 @@
 //!  * [ ] Cancel request
 //!  * [ ] Claim requests
 //!
+//! The goal of the project is to provide a similar API to other TChannel implementations which is why e.g. connection pools are hidden from user.
+//!
+//! **Disclaimer**
+//!
+//! > The project was used to learn Rust and it still has some missing features, so it will not go out of _alpha_ before implementing them and a proper testing.
+//! > The API may be a subject of change in consecutive `0.1.0-alpha.X` releases.
+//!
 //! ## Examples
 //! ```
 //! use tchannel_protocol::{Config, TChannel, TResult};
@@ -41,23 +44,21 @@
 //! async fn main() -> TResult<()> {
 //!     // Server
 //!     let mut tserver = TChannel::new(Config::default())?;
-//!     let subchannel = tserver.subchannel("service".to_string()).await?;
+//!     let subchannel = tserver.subchannel("service").await?;
 //!     subchannel.register("endpoint", Handler {}).await?;
 //!     tserver.start_server()?;
 //!
 //!     // Client
 //!     let tclient = TChannel::new(Config::default())?;
-//!     let subchannel = tclient.subchannel("service".to_string()).await?;
-//!     let request = RawMessage::new("endpoint".into(), "a".into(), "b".into());
-//!     let response_res = subchannel.send(request, "127.0.0.1:8888").await;
+//!     let subchannel = tclient.subchannel("service").await?;
+//!     let request = RawMessage::new("endpoint".into(), "header".into(), "req body".into());
+//!     let response = subchannel.send(request, "127.0.0.1:8888").await.unwrap();
 //!
 //!     // Server shutdown
 //!     tserver.shutdown_server();
 //!
-//!     assert!(response_res.is_ok());
-//!     let response = response_res.unwrap();
-//!     assert_eq!("a", response.header());
-//!     assert_eq!("y".as_bytes(), response.body().as_ref());
+//!     assert_eq!("header", response.header());
+//!     assert_eq!("res body".as_bytes(), response.body().as_ref());
 //!     Ok(())
 //! }
 //!
@@ -67,8 +68,7 @@
 //!     type REQ = RawMessage;
 //!     type RES = RawMessage;
 //!     fn handle(&mut self, request: Self::REQ) -> HandlerResult<Self::RES> {
-//!         let req_header = request.header().clone();
-//!         Ok(RawMessage::new("x".into(), req_header, "y".into()))
+//!         Ok(RawMessage::new(request.endpoint().clone(), request.header().clone(), "res body".into()))
 //!     }
 //! }
 //! ```
@@ -107,4 +107,5 @@ pub mod messages;
 pub use self::channel::TChannel;
 pub use self::channel::TResult;
 pub use self::connection::Config;
+pub use self::connection::ConfigBuilder;
 pub use self::subchannel::SubChannel;
