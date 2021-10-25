@@ -1,4 +1,5 @@
-use crate::connection::{Config, Connection, ConnectionResult};
+use crate::config::Config;
+use crate::connection::{Connection, ConnectionResult};
 use crate::errors::ConnectionError;
 use crate::errors::ConnectionError::{MessageErrorId, UnexpectedResponseError};
 use crate::frames::payloads::ErrorMsg;

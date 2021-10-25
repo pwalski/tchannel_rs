@@ -1,5 +1,6 @@
 use crate::channel::{SharedSubChannels, TResult};
-use crate::connection::{Config, ConnectionResult, FrameInput, FrameSender, FramesDispatcher};
+use crate::config::Config;
+use crate::connection::{ConnectionResult, FrameInput, FrameSender, FramesDispatcher};
 use crate::defragmentation::RequestDefragmenter;
 use crate::errors::{ConnectionError, TChannelError};
 use crate::fragmentation::ResponseFragmenter;

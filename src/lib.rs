@@ -8,7 +8,7 @@
 //!  * [x] Multiplexing multiple requests across the same TCP socket,
 //!  * [x] Out-of-order responses,
 //!  * [ ] Streaming requests and responses,
-//!  * [ ] Checksums of frame args (only None),
+//!  * [ ] Checksums of frame args (only _None_),
 //!  * [ ] Transport of arbitrary payloads:
 //!     * [ ] Thrift
 //!     * [ ] SThrift (streaming Thrift)
@@ -25,7 +25,7 @@
 //!  * [ ] Cancel request
 //!  * [ ] Claim requests
 //!
-//! The goal of the project is to provide a similar API to other TChannel implementations which is why e.g. connection pools are hidden from user.
+//! The goal of the project is to provide a similar API to other TChannel implementations which is why both connection pools and server task handler are hidden from user.
 //!
 //! **Disclaimer**
 //!
@@ -34,11 +34,11 @@
 //!
 //! ## Examples
 //! ```
+//! use tokio::runtime::Runtime;
 //! use tchannel_protocol::{Config, TChannel, TResult};
 //! use tchannel_protocol::handler::{HandlerResult, RequestHandler};
 //! use tchannel_protocol::messages::MessageChannel;
-//! use tchannel_protocol::messages::raw::RawMessage;
-//! use tokio::runtime::Runtime;
+//! use tchannel_protocol::messages::RawMessage;
 //!
 //! #[tokio::main]
 //! async fn main() -> TResult<()> {
@@ -93,6 +93,7 @@ extern crate bitflags;
 extern crate log;
 
 pub(crate) mod channel;
+pub(crate) mod config;
 pub(crate) mod connection;
 pub(crate) mod defragmentation;
 pub(crate) mod fragmentation;
@@ -100,12 +101,15 @@ pub(crate) mod frames;
 pub(crate) mod server;
 pub(crate) mod subchannel;
 
+/// TChannel errors.
 pub mod errors;
+/// Handlers registered in [`SubChannel`](crate::SubChannel) and called by server started from [`TChannel`](crate::TChannel).
 pub mod handler;
+/// Messages send from [`SubChannel`](crate::SubChannel) and handled by [`RequestHandler`](crate::handler::RequestHandler) ([`RequestHandlerAsync`](crate::handler::RequestHandlerAsync))
 pub mod messages;
 
 pub use self::channel::TChannel;
 pub use self::channel::TResult;
-pub use self::connection::Config;
-pub use self::connection::ConfigBuilder;
 pub use self::subchannel::SubChannel;
+pub use config::Config;
+pub use config::ConfigBuilder;

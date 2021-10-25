@@ -9,9 +9,13 @@ use std::fmt::Debug;
 use std::net::ToSocketAddrs;
 use std::pin::Pin;
 
-pub mod raw;
+mod raw;
 #[cfg(feature = "thrift")]
-pub mod thrift;
+mod thrift;
+
+pub use raw::RawMessage;
+#[cfg(feature = "thrift")]
+pub use thrift::ThriftMessage;
 
 pub trait Message:
     Debug
@@ -27,6 +31,12 @@ pub trait MessageChannel {
     type REQ: Message;
     type RES: Message;
 
+    /// Sends `message` to `host` address.
+    ///
+    /// Error message response arrives as [`super::errors::HandlerError::MessageError`].
+    /// # Arguments
+    /// * `request` - Implementation of `Message` trait.
+    /// * `host` - Address used to connect to host or find previously pooled connection.
     fn send<'a, ADDR: ToSocketAddrs + Send + 'a>(
         &'a self,
         request: Self::REQ,
@@ -43,7 +53,7 @@ pub struct MessageArgs {
 pub(crate) type MessageArgsResponse = TResult<(ResponseCode, MessageArgs)>;
 
 #[derive(Copy, Clone, Debug, PartialEq, FromPrimitive, ToPrimitive)]
-pub enum ResponseCode {
+pub(crate) enum ResponseCode {
     Ok = 0x00,
     Error = 0x01,
 }

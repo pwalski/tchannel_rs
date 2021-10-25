@@ -13,7 +13,7 @@ use std::collections::VecDeque;
 use std::str::FromStr;
 
 #[derive(Debug)]
-pub struct ResponseDefragmenter {
+pub(crate) struct ResponseDefragmenter {
     defragmenter: Defragmenter,
 }
 
@@ -257,20 +257,17 @@ impl ArgsDefragmenter {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use std::convert::TryInto;
-
-    use tokio_test::*;
-
+    use super::*;
     use crate::frames::headers::ArgSchemeValue;
     use crate::frames::headers::TransportHeaderKey::ArgScheme;
     use crate::frames::payloads::{
         CallRequest, CallRequestFields, CallResponseFields, TraceFlags, Tracing,
     };
     use crate::frames::{TFrame, TFrameId};
-    use crate::messages::raw::RawMessage;
-
-    use super::*;
+    use crate::messages::RawMessage;
+    use std::collections::HashMap;
+    use std::convert::TryInto;
+    use tokio_test::*;
 
     const SERVICE_NAME: &str = "test_service";
     const ARG_SCHEME: ArgSchemeValue = ArgSchemeValue::Raw;

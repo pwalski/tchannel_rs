@@ -12,6 +12,9 @@ use std::net::ToSocketAddrs;
 use std::pin::Pin;
 use std::string::FromUtf8Error;
 
+/// `RawMessage` is intended for any custom encodings you want to do that are not part of TChannel.
+///
+///  Consider using the thrift, sthrift, json or http encodings before using it.
 #[derive(Default, Debug, Clone, Builder, Getters, MutGetters, new)]
 #[builder(pattern = "owned")]
 pub struct RawMessage {

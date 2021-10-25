@@ -1,14 +1,12 @@
 use crate::errors::ConnectionError;
 use crate::frames::payloads::CodecResult;
 use crate::frames::{TFrame, TFrameId, TFrameIdCodec};
-use core::time::Duration;
 use futures::prelude::*;
 use futures::{self, SinkExt};
 use futures::{future, StreamExt};
 use log::{debug, error};
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
@@ -24,29 +22,6 @@ use tokio_util::codec::{FramedRead, FramedWrite};
 pub mod pool;
 
 pub type ConnectionResult<T> = Result<T, ConnectionError>;
-
-#[derive(Debug, Builder)]
-pub struct Config {
-    pub(crate) max_connections: u32,
-    pub(crate) lifetime: Option<Duration>,
-    pub(crate) test_connection: bool,
-    pub(crate) frame_buffer_size: usize,
-    pub(crate) server_address: SocketAddr,
-    pub(crate) server_tasks: usize,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Config {
-            max_connections: 1,
-            lifetime: Some(Duration::from_secs(60)),
-            test_connection: false,
-            frame_buffer_size: 100,
-            server_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8888),
-            server_tasks: 4,
-        }
-    }
-}
 
 pub type FrameInput = Receiver<TFrameId>;
 

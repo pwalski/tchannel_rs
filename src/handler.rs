@@ -7,9 +7,9 @@ use std::pin::Pin;
 
 pub type HandlerResult<MES> = Result<MES, HandlerError<MES>>;
 
-/// Trait for handling requests asynchronously.
+/// Trait for handling requests with usage of `async`.
 ///
-/// Handler can be registered under an `endpoint` name by calling [`SubChannel::register_async`] method.
+/// Handler can be registered under an `endpoint` name by calling [`crate::SubChannel::register_async`] method.
 pub trait RequestHandlerAsync: Debug + Sync + Send {
     type REQ: Message;
     type RES: Message;
@@ -21,7 +21,7 @@ pub trait RequestHandlerAsync: Debug + Sync + Send {
 
 /// Trait for handling requests.
 ///
-/// Handler can be registered under an `endpoint` name by calling [`SubChannel::register`] method.
+/// Handler can be registered under an `endpoint` name by calling [`crate::SubChannel::register`] method.
 pub trait RequestHandler: Debug + Sync + Send {
     type REQ: Message;
     type RES: Message;

@@ -14,7 +14,7 @@ use bytes::Bytes;
 use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug)]
-pub struct ResponseFragmenter {
+pub(crate) struct ResponseFragmenter {
     fragmenter: Fragmenter,
     response_code: ResponseCode,
 }
@@ -273,14 +273,12 @@ fn calculate_checksum(_args: &VecDeque<Option<Bytes>>, csum_type: ChecksumType) 
 
 #[cfg(test)]
 mod tests {
-    use futures::StreamExt;
-    use tokio_test::*;
-
+    use super::*;
     use crate::frames::payloads::CallContinue;
     use crate::frames::payloads::CallRequest;
     use crate::frames::TFrame;
-
-    use super::*;
+    use futures::StreamExt;
+    use tokio_test::*;
 
     const SERVICE_NAME: &str = "test_service";
     const ARG_SCHEME: ArgSchemeValue = ArgSchemeValue::Json;

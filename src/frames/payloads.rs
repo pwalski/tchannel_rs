@@ -301,7 +301,7 @@ impl Call<CallRequestFields> for CallRequest {
 }
 
 #[derive(Debug, Getters, new)]
-pub struct CallResponseFields {
+pub(crate) struct CallResponseFields {
     #[get = "pub"]
     /// code:1
     pub code: ResponseCode,
@@ -341,7 +341,7 @@ impl CallFields for CallResponseFields {
 }
 
 #[derive(Debug, Getters, MutGetters, new)]
-pub struct CallResponse {
+pub(crate) struct CallResponse {
     /// flags:1
     #[get = "pub"]
     pub flags: Flags,
