@@ -68,7 +68,7 @@ async fn echo_test(
 
     // WHEN
     let res = make_request(service, req.clone()).await?;
-    server.shutdown_server();
+    server.shutdown_server()?;
 
     // THEN
     assert_eq!(
@@ -116,7 +116,7 @@ async fn parallel_messages() -> Result<(), anyhow::Error> {
 
     assert!(small.is_ok());
     assert!(large.is_ok());
-    server.shutdown_server();
+    server.shutdown_server()?;
     Ok(())
 }
 

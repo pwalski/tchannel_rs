@@ -17,7 +17,7 @@ async fn main() -> TResult<()> {
     let response_res = subchannel.send(request, "127.0.0.1:8888").await;
 
     // Server shutdown
-    tserver.shutdown_server();
+    tserver.shutdown_server()?;
 
     assert!(response_res.is_ok());
     let response = response_res.unwrap();

@@ -56,21 +56,19 @@ impl TChannel {
     }
 
     /// Stops server task.
-    pub fn shutdown_server(&self) {
-        //TODO new error type?
+    pub fn shutdown_server(&self) -> TResult<()> {
         let mut handle_lock = self
             .server_handle
             .lock()
-            .expect("Cannot lock on server task handle.");
-        //TODO dirty workaround for ability to shutdown Runtime having only &self (Drop impl).
+            .map_err(|err| TChannelError::Error(err.to_string()))?; //TODO new error type?
         if let Some(handle) = handle_lock.deref() {
             info!("Stopping server");
-            //TODO timeout?
-            handle.abort();
+            handle.abort(); //TODO timeout?
             *handle_lock = None;
         } else {
             debug!("Server already stopped. Nothing to do.");
         }
+        Ok(())
     }
 
     /// Gets `self::channel::SubChannel` for given `service_name`. If not found a new instance is created.
@@ -101,6 +99,8 @@ impl TChannel {
 impl Drop for TChannel {
     // Mainly to log shutting down.
     fn drop(&mut self) {
-        self.shutdown_server();
+        if let Err(err) = self.shutdown_server() {
+            error!("Failed to shutdown server on drop: {}", err.to_string());
+        }
     }
 }
