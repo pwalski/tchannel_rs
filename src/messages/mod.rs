@@ -19,7 +19,7 @@ pub use raw::RawMessageBuilder;
 #[cfg(feature = "thrift")]
 pub use thrift::ThriftMessage;
 
-pub trait Message: MessageWithArgs + Debug + Sized + Send {}
+pub trait Message: MessageWithArgs + Debug + Send {}
 
 pub trait MessageChannel {
     type REQ: Message;
