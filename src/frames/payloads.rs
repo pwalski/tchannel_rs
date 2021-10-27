@@ -1,6 +1,6 @@
 use crate::errors::CodecError;
 use crate::frames::{FRAME_HEADER_LENGTH, FRAME_MAX_LENGTH};
-use crate::messages::ResponseCode;
+use crate::messages::args::ResponseCode;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use num_traits::FromPrimitive;
 use std::collections::{HashMap, VecDeque};

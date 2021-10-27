@@ -8,7 +8,7 @@ use crate::frames::payloads::{
     ChecksumType, Flags, TraceFlags, Tracing, ARG_LEN_LEN,
 };
 use crate::frames::{TFrame, TFrameStream, Type, FRAME_HEADER_LENGTH, FRAME_MAX_LENGTH};
-use crate::messages::{MessageArgs, ResponseCode};
+use crate::messages::args::{MessageArgs, ResponseCode};
 use bytes::Buf;
 use bytes::Bytes;
 use std::collections::{HashMap, VecDeque};
@@ -55,7 +55,7 @@ pub struct RequestFragmenter {
 }
 
 impl RequestFragmenter {
-    pub fn new(service_name: String, args: MessageArgs) -> RequestFragmenter {
+    pub(crate) fn new(service_name: String, args: MessageArgs) -> RequestFragmenter {
         let fragmenter = Fragmenter::new(service_name, args);
         RequestFragmenter { fragmenter }
     }

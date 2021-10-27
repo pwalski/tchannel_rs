@@ -125,7 +125,7 @@ async fn send_msgs(
     msgs: Vec<RawMessage>,
 ) -> Result<(), anyhow::Error> {
     for req in msgs {
-        debug!("Sending {} bytes.", &req.header().len() + &req.body().len());
+        debug!("Sending {} bytes.", req.header().len() + req.body().len());
         let res = subchannel.send(req.clone(), &LOCAL_SERVER).await?;
         assert_eq!(req.endpoint(), res.endpoint(), "Endpoints should match");
         assert_eq!(req.header(), res.header(), "Header fields should match");

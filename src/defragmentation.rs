@@ -7,7 +7,8 @@ use crate::frames::payloads::{
     CallResponseFields, ChecksumType, Codec, CodecResult, Flags,
 };
 use crate::frames::Type;
-use crate::messages::{Message, MessageArgs, ResponseCode};
+use crate::messages::args::{MessageArgs, ResponseCode};
+use crate::messages::Message;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::collections::VecDeque;
 use std::str::FromStr;
@@ -53,7 +54,7 @@ impl RequestDefragmenter {
         RequestDefragmenter { defragmenter }
     }
 
-    pub async fn read_request(self) -> TResult<(CallRequestFields, MessageArgs)> {
+    pub(crate) async fn read_request(self) -> TResult<(CallRequestFields, MessageArgs)> {
         self.defragmenter
             .read(Type::CallRequest, CallRequest::decode)
             .await

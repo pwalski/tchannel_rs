@@ -9,8 +9,8 @@ use crate::handler::{
     HandlerResult, MessageArgsHandler, RequestHandler, RequestHandlerAdapter, RequestHandlerAsync,
     RequestHandlerAsyncAdapter,
 };
-use crate::messages::ResponseCode;
-use crate::messages::{Message, MessageArgs, MessageArgsResponse};
+use crate::messages::args::{MessageArgs, MessageArgsResponse, ResponseCode};
+use crate::messages::Message;
 use futures::StreamExt;
 use futures::{future, TryStreamExt};
 use log::{debug, error};

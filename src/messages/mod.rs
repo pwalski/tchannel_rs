@@ -2,6 +2,7 @@ use crate::channel::TResult;
 use crate::errors::CodecError;
 use crate::frames::headers::ArgSchemeValue;
 use crate::handler::HandlerResult;
+use crate::messages::args::MessageWithArgs;
 use bytes::Bytes;
 use futures::Future;
 use std::convert::{TryFrom, TryInto};
@@ -14,18 +15,11 @@ mod raw;
 mod thrift;
 
 pub use raw::RawMessage;
+pub use raw::RawMessageBuilder;
 #[cfg(feature = "thrift")]
 pub use thrift::ThriftMessage;
 
-pub trait Message:
-    Debug
-    + Sized
-    + Send
-    + TryFrom<MessageArgs, Error = CodecError>
-    + TryInto<MessageArgs, Error = CodecError>
-{
-    fn args_scheme() -> ArgSchemeValue;
-}
+pub trait Message: MessageWithArgs + Debug + Sized + Send {}
 
 pub trait MessageChannel {
     type REQ: Message;
@@ -44,16 +38,28 @@ pub trait MessageChannel {
     ) -> Pin<Box<dyn Future<Output = HandlerResult<Self::RES>> + Send + '_>>;
 }
 
-#[derive(Debug, new)]
-pub struct MessageArgs {
-    pub arg_scheme: ArgSchemeValue,
-    pub args: Vec<Bytes>,
-}
+pub(crate) mod args {
+    use super::*;
 
-pub(crate) type MessageArgsResponse = TResult<(ResponseCode, MessageArgs)>;
+    #[doc(hidden)]
+    pub trait MessageWithArgs:
+        TryFrom<MessageArgs, Error = CodecError> + TryInto<MessageArgs, Error = CodecError>
+    {
+        fn args_scheme() -> ArgSchemeValue;
+    }
 
-#[derive(Copy, Clone, Debug, PartialEq, FromPrimitive, ToPrimitive)]
-pub(crate) enum ResponseCode {
-    Ok = 0x00,
-    Error = 0x01,
+    #[doc(hidden)]
+    #[derive(Debug, new)]
+    pub struct MessageArgs {
+        pub arg_scheme: ArgSchemeValue,
+        pub args: Vec<Bytes>,
+    }
+
+    #[derive(Copy, Clone, Debug, PartialEq, FromPrimitive, ToPrimitive)]
+    pub enum ResponseCode {
+        Ok = 0x00,
+        Error = 0x01,
+    }
+
+    pub type MessageArgsResponse = TResult<(ResponseCode, MessageArgs)>;
 }

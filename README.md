@@ -29,8 +29,9 @@ Other TODOs:
  * [ ] Request response TTL
  * [ ] Cancel request
  * [ ] Claim requests
+ * [ ] Use Tower?
 
-The goal of the project is to provide a similar API to other TChannel implementations which is why both connection pools and server task handler are hidden from user.
+The goal of the project is to provide a similar API to Java TChannel implementation which is why both connection pools and server task handler are hidden from user.
 
 **Disclaimer**
 
@@ -39,11 +40,9 @@ The goal of the project is to provide a similar API to other TChannel implementa
 
 ### Examples
 ```rust
-use tokio::runtime::Runtime;
 use tchannel_protocol::{Config, TChannel, TResult};
 use tchannel_protocol::handler::{HandlerResult, RequestHandler};
-use tchannel_protocol::messages::MessageChannel;
-use tchannel_protocol::messages::RawMessage;
+use tchannel_protocol::messages::{MessageChannel, RawMessage};
 
 #[tokio::main]
 async fn main() -> TResult<()> {
