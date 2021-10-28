@@ -9,6 +9,12 @@ license = "MIT"
 readme = "README.md"
 categories = ["network-programming"]
 keywords = ["rpc", "protcol", "networking"]
+include = [
+    "**/*.rs",
+    "/Cargo.toml",
+    "/LICENSE.md",
+    "/README.md"
+]
 
 [dependencies]
 getset = "0.1"

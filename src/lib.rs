@@ -25,7 +25,7 @@
 //!  * [ ] Cancel request
 //!  * [ ] Claim requests
 //!  * [ ] Use Tower?
-//!  * [ ] Implement Serde Serialize/Deserialize to Message types
+//!  * [ ] Implement Serde Serialize/Deserialize for Message types
 //!
 //! The goal of the project is to provide a similar API to Java TChannel implementation which is why both connection pools and server task handler are hidden from user.
 //!
