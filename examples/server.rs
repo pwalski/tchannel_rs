@@ -1,10 +1,10 @@
 use log::{error, info};
 use std::ops::AddAssign;
 use std::time::Duration;
-use tchannel_protocol::errors::HandlerError;
-use tchannel_protocol::handler::{HandlerResult, RequestHandler};
-use tchannel_protocol::messages::RawMessage;
-use tchannel_protocol::{Config, TChannel};
+use tchannel_rs::errors::HandlerError;
+use tchannel_rs::handler::{HandlerResult, RequestHandler};
+use tchannel_rs::messages::RawMessage;
+use tchannel_rs::{Config, TChannel};
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 

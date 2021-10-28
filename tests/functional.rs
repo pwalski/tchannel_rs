@@ -9,11 +9,11 @@ use std::sync::Arc;
 use bytes::Bytes;
 use test_case::test_case;
 
-use tchannel_protocol::handler::{HandlerResult, RequestHandler};
-use tchannel_protocol::messages::MessageChannel;
-use tchannel_protocol::messages::RawMessage;
-use tchannel_protocol::Config;
-use tchannel_protocol::{SubChannel, TChannel, TResult};
+use tchannel_rs::handler::{HandlerResult, RequestHandler};
+use tchannel_rs::messages::MessageChannel;
+use tchannel_rs::messages::RawMessage;
+use tchannel_rs::Config;
+use tchannel_rs::{SubChannel, TChannel, TResult};
 
 #[test_case("service", "endpoint", "header", "body";    "Basic")]
 #[test_case("service", "endpoint", "header", "";        "Empty body")]

@@ -1,5 +1,5 @@
 [package]
-name = "tchannel_protocol"
+name = "tchannel_rs"
 version = "0.1.0-alpha.2"
 edition = "2018"
 description = "Network multiplexing and framing RPC protocol"

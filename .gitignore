@@ -1,6 +1,6 @@
 **/.DS_Store
 .idea
-tchannel-rs.iml
+tchannel_rs.iml
 examples-jvm-server/tchannel-jvm-server.iml
 examples-jvm-server/.idea/
 examples-jvm-server/target/

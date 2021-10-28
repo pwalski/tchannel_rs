@@ -1,6 +1,6 @@
 use log::{error, info};
-use tchannel_protocol::messages::{MessageChannel, RawMessage};
-use tchannel_protocol::{Config, TChannel};
+use tchannel_rs::messages::{MessageChannel, RawMessage};
+use tchannel_rs::{Config, TChannel};
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 

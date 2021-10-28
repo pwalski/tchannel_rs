@@ -31,14 +31,14 @@
 //!
 //! **Disclaimer**
 //!
-//! > The project was used to learn Rust and it still has some missing features, so it will not go out of _alpha_ before implementing them and a proper testing.
+//! > It is an unofficial implementation of TChannel protocol. The project was used to learn Rust and it still has some missing features, so it will not go out of _alpha_ before implementing them and a proper testing.
 //! > The API may be a subject of change in consecutive `0.1.0-alpha.X` releases.
 //!
 //! ## Examples
 //! ```
-//! use tchannel_protocol::{Config, TChannel, TResult};
-//! use tchannel_protocol::handler::{HandlerResult, RequestHandler};
-//! use tchannel_protocol::messages::{MessageChannel, RawMessage};
+//! use tchannel_rs::{Config, TChannel, TResult};
+//! use tchannel_rs::handler::{HandlerResult, RequestHandler};
+//! use tchannel_rs::messages::{MessageChannel, RawMessage};
 //!
 //! #[tokio::main]
 //! async fn main() -> TResult<()> {

@@ -1,4 +1,4 @@
-[![build status](https://github.com/pwalski/tchannel-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/pwalski/tchannel-rs/actions)
+[![build status](https://github.com/pwalski/tchannel_rs/actions/workflows/ci.yml/badge.svg)](https://github.com/pwalski/tchannel_rs/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE.md)
 
 # {{crate}}

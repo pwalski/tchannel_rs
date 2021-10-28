@@ -719,7 +719,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tchannel_protocol"
+name = "tchannel_rs"
 version = "0.1.0-alpha.2"
 dependencies = [
  "anyhow",

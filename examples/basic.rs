@@ -1,6 +1,6 @@
-use tchannel_protocol::handler::{HandlerResult, RequestHandler};
-use tchannel_protocol::messages::{MessageChannel, RawMessage};
-use tchannel_protocol::{Config, TChannel, TResult};
+use tchannel_rs::handler::{HandlerResult, RequestHandler};
+use tchannel_rs::messages::{MessageChannel, RawMessage};
+use tchannel_rs::{Config, TChannel, TResult};
 
 #[tokio::main]
 async fn main() -> TResult<()> {
