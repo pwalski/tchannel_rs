@@ -1,6 +1,6 @@
 use crate::errors::CodecError;
 use crate::frames::{FRAME_HEADER_LENGTH, FRAME_MAX_LENGTH};
-use crate::messages::ResponseCode;
+use crate::messages::args::ResponseCode;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use num_traits::FromPrimitive;
 use std::collections::{HashMap, VecDeque};
@@ -301,7 +301,7 @@ impl Call<CallRequestFields> for CallRequest {
 }
 
 #[derive(Debug, Getters, new)]
-pub struct CallResponseFields {
+pub(crate) struct CallResponseFields {
     #[get = "pub"]
     /// code:1
     pub code: ResponseCode,
@@ -341,7 +341,7 @@ impl CallFields for CallResponseFields {
 }
 
 #[derive(Debug, Getters, MutGetters, new)]
-pub struct CallResponse {
+pub(crate) struct CallResponse {
     /// flags:1
     #[get = "pub"]
     pub flags: Flags,

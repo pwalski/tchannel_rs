@@ -4,13 +4,16 @@ extern crate log;
 #[macro_use]
 extern crate serial_test;
 
-use bytes::Bytes;
 use std::sync::Arc;
-use tchannel_protocol::handler::{HandlerResult, RequestHandler};
-use tchannel_protocol::messages::raw::RawMessage;
-use tchannel_protocol::messages::MessageChannel;
-use tchannel_protocol::{Config, SubChannel, TChannel, TResult};
+
+use bytes::Bytes;
 use test_case::test_case;
+
+use tchannel_protocol::handler::{HandlerResult, RequestHandler};
+use tchannel_protocol::messages::MessageChannel;
+use tchannel_protocol::messages::RawMessage;
+use tchannel_protocol::Config;
+use tchannel_protocol::{SubChannel, TChannel, TResult};
 
 #[test_case("service", "endpoint", "header", "body";    "Basic")]
 #[test_case("service", "endpoint", "header", "";        "Empty body")]
@@ -65,7 +68,7 @@ async fn echo_test(
 
     // WHEN
     let res = make_request(service, req.clone()).await?;
-    server.shutdown_server();
+    server.shutdown_server()?;
 
     // THEN
     assert_eq!(
@@ -96,12 +99,12 @@ async fn parallel_messages() -> Result<(), anyhow::Error> {
             )
         })
         .collect::<Vec<RawMessage>>();
-    let large_msgs = (0..5 as u8)
+    let large_msgs = (0..5_u8)
         .map(|i| {
             RawMessage::new(
                 endpoint.to_string(),
                 from_v(&[i as u8; u16::MAX as usize * 20]).to_string(),
-                Bytes::from(from_v(&[i + 5 as u8; u16::MAX as usize * 10]).to_string()),
+                Bytes::from(from_v(&[i + 5_u8; u16::MAX as usize * 10]).to_string()),
             )
         })
         .collect::<Vec<RawMessage>>();
@@ -113,7 +116,7 @@ async fn parallel_messages() -> Result<(), anyhow::Error> {
 
     assert!(small.is_ok());
     assert!(large.is_ok());
-    server.shutdown_server();
+    server.shutdown_server()?;
     Ok(())
 }
 
@@ -122,7 +125,7 @@ async fn send_msgs(
     msgs: Vec<RawMessage>,
 ) -> Result<(), anyhow::Error> {
     for req in msgs {
-        debug!("Sending {} bytes.", &req.header().len() + &req.body().len());
+        debug!("Sending {} bytes.", req.header().len() + req.body().len());
         let res = subchannel.send(req.clone(), &LOCAL_SERVER).await?;
         assert_eq!(req.endpoint(), res.endpoint(), "Endpoints should match");
         assert_eq!(req.header(), res.header(), "Header fields should match");

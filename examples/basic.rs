@@ -1,9 +1,6 @@
-use tchannel_protocol::handler::HandlerResult;
-use tchannel_protocol::handler::RequestHandler;
-use tchannel_protocol::messages::raw::RawMessage;
-use tchannel_protocol::messages::MessageChannel;
-use tchannel_protocol::TResult;
-use tchannel_protocol::{Config, TChannel};
+use tchannel_protocol::handler::{HandlerResult, RequestHandler};
+use tchannel_protocol::messages::{MessageChannel, RawMessage};
+use tchannel_protocol::{Config, TChannel, TResult};
 
 #[tokio::main]
 async fn main() -> TResult<()> {
@@ -20,7 +17,7 @@ async fn main() -> TResult<()> {
     let response_res = subchannel.send(request, "127.0.0.1:8888").await;
 
     // Server shutdown
-    tserver.shutdown_server();
+    tserver.shutdown_server()?;
 
     assert!(response_res.is_ok());
     let response = response_res.unwrap();

@@ -1,7 +1,8 @@
 use crate::errors::CodecError;
 use crate::frames::headers::ArgSchemeValue;
 use crate::handler::HandlerResult;
-use crate::messages::{Message, MessageArgs, MessageChannel};
+use crate::messages::args::{MessageArgs, MessageWithArgs};
+use crate::messages::{Message, MessageChannel};
 use crate::subchannel::SubChannel;
 use bytes::{Buf, Bytes};
 use futures::Future;
@@ -12,7 +13,10 @@ use std::net::ToSocketAddrs;
 use std::pin::Pin;
 use std::string::FromUtf8Error;
 
-#[derive(Default, Debug, Clone, Builder, Getters, MutGetters, new)]
+/// `RawMessage` is intended for any custom encodings you want to do that are not part of TChannel.
+///
+///  Consider using the thrift, sthrift, json or http encodings before using it.
+#[derive(Default, Debug, Clone, Builder, Getters, new)]
 #[builder(pattern = "owned")]
 pub struct RawMessage {
     //arg1
@@ -23,7 +27,6 @@ pub struct RawMessage {
     header: String,
     //arg3
     #[get = "pub"]
-    #[get_mut = "pub"]
     body: Bytes,
 }
 
@@ -67,7 +70,9 @@ impl TryInto<MessageArgs> for RawMessage {
     }
 }
 
-impl Message for RawMessage {
+impl Message for RawMessage {}
+
+impl MessageWithArgs for RawMessage {
     fn args_scheme() -> ArgSchemeValue {
         ArgSchemeValue::Raw
     }

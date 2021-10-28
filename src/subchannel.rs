@@ -9,8 +9,8 @@ use crate::handler::{
     HandlerResult, MessageArgsHandler, RequestHandler, RequestHandlerAdapter, RequestHandlerAsync,
     RequestHandlerAsyncAdapter,
 };
-use crate::messages::ResponseCode;
-use crate::messages::{Message, MessageArgs, MessageArgsResponse};
+use crate::messages::args::{MessageArgs, MessageArgsResponse, ResponseCode};
+use crate::messages::Message;
 use futures::StreamExt;
 use futures::{future, TryStreamExt};
 use log::{debug, error};
@@ -22,6 +22,8 @@ use tokio::sync::{Mutex, RwLock};
 type HandlerRef = Arc<Mutex<Box<dyn MessageArgsHandler>>>;
 
 /// TChannel protocol subchannel.
+///
+/// Allows to send [`Message`](crate::messages::Message) and [`register`](Self::register)/[`unregister`](Self::unregister) [`RequestHandler`](crate::handler::RequestHandler) (or [`RequestHandlerAsync`](crate::handler::RequestHandlerAsync)).
 #[derive(Debug, new)]
 pub struct SubChannel {
     service_name: String,
@@ -31,11 +33,6 @@ pub struct SubChannel {
 }
 
 impl SubChannel {
-    /// Sends `message` to `host` address.
-    ///
-    /// # Arguments
-    /// * `request` - Implementation of `Message` trait
-    /// * `host` - Address used to connect to host or find previously pooled connection.
     pub(super) async fn send<REQ: Message, RES: Message, ADDR: ToSocketAddrs>(
         &self,
         request: REQ,
@@ -77,9 +74,9 @@ impl SubChannel {
     }
 
     /// Registers request handler.
-    pub async fn register<STR: AsRef<str>, REQ, RES, HANDLER>(
+    pub async fn register<REQ, RES, HANDLER>(
         &self,
-        endpoint: STR,
+        endpoint: impl AsRef<str>,
         request_handler: HANDLER,
     ) -> TResult<()>
     where
@@ -93,9 +90,9 @@ impl SubChannel {
     }
 
     /// Registers async request handler.
-    pub async fn register_async<STR: AsRef<str>, REQ, RES, HANDLER>(
+    pub async fn register_async<REQ, RES, HANDLER>(
         &self,
-        endpoint: STR,
+        endpoint: impl AsRef<str>,
         request_handler: HANDLER,
     ) -> TResult<()>
     where
@@ -108,8 +105,8 @@ impl SubChannel {
             .await
     }
 
-    /// Unregister request handler.
-    pub async fn unregister<S: AsRef<str>>(&mut self, endpoint: S) -> TResult<()> {
+    /// Unregisters request handler. Found handler will be dropped.
+    pub async fn unregister(&mut self, endpoint: impl AsRef<str>) -> TResult<()> {
         let mut handlers = self.handlers.write().await;
         match handlers.remove(endpoint.as_ref()) {
             Some(_) => Ok(()),
@@ -120,9 +117,9 @@ impl SubChannel {
         }
     }
 
-    async fn register_handler<S: AsRef<str>>(
+    async fn register_handler(
         &self,
-        endpoint: S,
+        endpoint: impl AsRef<str>,
         request_handler: HandlerRef,
     ) -> TResult<()> {
         let mut handlers = self.handlers.write().await;

@@ -7,13 +7,14 @@ use crate::frames::payloads::{
     CallResponseFields, ChecksumType, Codec, CodecResult, Flags,
 };
 use crate::frames::Type;
-use crate::messages::{Message, MessageArgs, ResponseCode};
+use crate::messages::args::{MessageArgs, ResponseCode};
+use crate::messages::Message;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::collections::VecDeque;
 use std::str::FromStr;
 
 #[derive(Debug)]
-pub struct ResponseDefragmenter {
+pub(crate) struct ResponseDefragmenter {
     defragmenter: Defragmenter,
 }
 
@@ -53,7 +54,7 @@ impl RequestDefragmenter {
         RequestDefragmenter { defragmenter }
     }
 
-    pub async fn read_request(self) -> TResult<(CallRequestFields, MessageArgs)> {
+    pub(crate) async fn read_request(self) -> TResult<(CallRequestFields, MessageArgs)> {
         self.defragmenter
             .read(Type::CallRequest, CallRequest::decode)
             .await
@@ -257,20 +258,17 @@ impl ArgsDefragmenter {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use std::convert::TryInto;
-
-    use tokio_test::*;
-
+    use super::*;
     use crate::frames::headers::ArgSchemeValue;
     use crate::frames::headers::TransportHeaderKey::ArgScheme;
     use crate::frames::payloads::{
         CallRequest, CallRequestFields, CallResponseFields, TraceFlags, Tracing,
     };
     use crate::frames::{TFrame, TFrameId};
-    use crate::messages::raw::RawMessage;
-
-    use super::*;
+    use crate::messages::RawMessage;
+    use std::collections::HashMap;
+    use std::convert::TryInto;
+    use tokio_test::*;
 
     const SERVICE_NAME: &str = "test_service";
     const ARG_SCHEME: ArgSchemeValue = ArgSchemeValue::Raw;

@@ -1,5 +1,6 @@
+use crate::config::Config;
 use crate::connection::pool::{ConnectionPools, ConnectionPoolsBuilder};
-use crate::connection::{Config, ConnectionResult};
+use crate::connection::ConnectionResult;
 use crate::errors::TChannelError;
 use crate::server::Server;
 use crate::SubChannel;
@@ -17,7 +18,7 @@ type ServerHandle = Mutex<Option<JoinHandle<ConnectionResult<()>>>>;
 /// TChannel general result.
 pub type TResult<T> = Result<T, TChannelError>;
 
-/// TChannel protocol.
+/// TChannel protocol. Keeps started server handle and created [`SubChannel`s](crate::SubChannel).
 pub struct TChannel {
     config: Arc<Config>,
     connection_pools: Arc<ConnectionPools>,
@@ -55,35 +56,30 @@ impl TChannel {
     }
 
     /// Stops server task.
-    pub fn shutdown_server(&self) {
-        //TODO new error type?
+    pub fn shutdown_server(&self) -> TResult<()> {
         let mut handle_lock = self
             .server_handle
             .lock()
-            .expect("Cannot lock on server task handle.");
-        //TODO dirty workaround for ability to shutdown Runtime having only &self (Drop impl).
+            .map_err(|err| TChannelError::Error(err.to_string()))?; //TODO new error type?
         if let Some(handle) = handle_lock.deref() {
             info!("Stopping server");
-            //TODO timeout?
-            handle.abort();
+            handle.abort(); //TODO timeout?
             *handle_lock = None;
         } else {
             debug!("Server already stopped. Nothing to do.");
         }
+        Ok(())
     }
 
-    /// Gets subchannel for given `service_name`. If not found a new instance is created.
-    pub async fn subchannel<STR: AsRef<str>>(&self, service_name: STR) -> TResult<Arc<SubChannel>> {
+    /// Gets `self::channel::SubChannel` for given `service_name`. If not found a new instance is created.
+    pub async fn subchannel(&self, service_name: impl AsRef<str>) -> TResult<Arc<SubChannel>> {
         if let Some(subchannel) = self.subchannels.read().await.get(service_name.as_ref()) {
             return Ok(subchannel.clone());
         }
         self.create_subchannel(service_name).await
     }
 
-    async fn create_subchannel<STR: AsRef<str>>(
-        &self,
-        service_name: STR,
-    ) -> TResult<Arc<SubChannel>> {
+    async fn create_subchannel(&self, service_name: impl AsRef<str>) -> TResult<Arc<SubChannel>> {
         let mut subchannels = self.subchannels.write().await;
         match subchannels.get(service_name.as_ref()) {
             Some(subchannel) => Ok(subchannel.clone()),
@@ -101,7 +97,10 @@ impl TChannel {
 }
 
 impl Drop for TChannel {
+    // Mainly to log shutting down.
     fn drop(&mut self) {
-        self.shutdown_server();
+        if let Err(err) = self.shutdown_server() {
+            error!("Failed to shutdown server on drop: {}", err.to_string());
+        }
     }
 }

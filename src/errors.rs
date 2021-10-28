@@ -8,9 +8,9 @@ use strum::ParseError;
 use thiserror::Error;
 use tokio::sync::mpsc::error::SendError;
 
+/// General TChannel error.
 #[derive(Error, Debug, PartialEq)]
 pub enum TChannelError {
-    /// Represents general error.
     #[error("TChannel error: {0}")]
     Error(String),
 
@@ -83,6 +83,7 @@ pub enum HandlerError<RES: Message> {
     MessageError(RES),
 }
 
+/// Newtype of [`std::io::Error`].
 #[derive(Error, Debug)]
 pub struct IoError(std::io::Error);
 

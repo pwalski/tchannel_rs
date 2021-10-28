@@ -1,12 +1,15 @@
 use crate::errors::CodecError;
 use crate::frames::headers::ArgSchemeValue;
-use crate::messages::{Message, MessageArgs};
+use crate::messages::args::{MessageArgs, MessageWithArgs};
+use crate::messages::Message;
 use std::convert::{TryFrom, TryInto};
 
 #[derive(Default, Debug)]
 pub struct ThriftMessage {}
 
-impl Message for ThriftMessage {
+impl Message for ThriftMessage {}
+
+impl MessageWithArgs for ThriftMessage {
     fn args_scheme() -> ArgSchemeValue {
         ArgSchemeValue::Thrift
     }

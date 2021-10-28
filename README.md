@@ -5,10 +5,6 @@
 
 TChannel is a network multiplexing and framing RPC protocol created by Uber ([protocol specs](https://github.com/uber/tchannel/blob/master/docs/protocol.md)).
 
-#### Disclaimer
-
-The project serves as an excuse to learn Rust therefore the implementation may be suboptimal and features are not tested properly.
-
 ### Overview
 
 Features of TChannel protocol implemented so far:
@@ -17,7 +13,7 @@ Features of TChannel protocol implemented so far:
  * [x] Multiplexing multiple requests across the same TCP socket,
  * [x] Out-of-order responses,
  * [ ] Streaming requests and responses,
- * [ ] Checksums of frame args (only None),
+ * [ ] Checksums of frame args (only _None_),
  * [ ] Transport of arbitrary payloads:
     * [ ] Thrift
     * [ ] SThrift (streaming Thrift)
@@ -33,36 +29,41 @@ Other TODOs:
  * [ ] Request response TTL
  * [ ] Cancel request
  * [ ] Claim requests
+ * [ ] Use Tower?
+ * [ ] Implement Serde Serialize/Deserialize to Message types
+
+The goal of the project is to provide a similar API to Java TChannel implementation which is why both connection pools and server task handler are hidden from user.
+
+**Disclaimer**
+
+> The project was used to learn Rust and it still has some missing features, so it will not go out of _alpha_ before implementing them and a proper testing.
+> The API may be a subject of change in consecutive `0.1.0-alpha.X` releases.
 
 ### Examples
 ```rust
 use tchannel_protocol::{Config, TChannel, TResult};
 use tchannel_protocol::handler::{HandlerResult, RequestHandler};
-use tchannel_protocol::messages::MessageChannel;
-use tchannel_protocol::messages::raw::RawMessage;
-use tokio::runtime::Runtime;
+use tchannel_protocol::messages::{MessageChannel, RawMessage};
 
 #[tokio::main]
 async fn main() -> TResult<()> {
     // Server
     let mut tserver = TChannel::new(Config::default())?;
-    let subchannel = tserver.subchannel("service".to_string()).await?;
+    let subchannel = tserver.subchannel("service").await?;
     subchannel.register("endpoint", Handler {}).await?;
     tserver.start_server()?;
 
     // Client
     let tclient = TChannel::new(Config::default())?;
-    let subchannel = tclient.subchannel("service".to_string()).await?;
-    let request = RawMessage::new("endpoint".into(), "a".into(), "b".into());
-    let response_res = subchannel.send(request, "127.0.0.1:8888").await;
+    let subchannel = tclient.subchannel("service").await?;
+    let request = RawMessage::new("endpoint".into(), "header".into(), "req body".into());
+    let response = subchannel.send(request, "127.0.0.1:8888").await.unwrap();
 
     // Server shutdown
     tserver.shutdown_server();
 
-    assert!(response_res.is_ok());
-    let response = response_res.unwrap();
-    assert_eq!("a", response.header());
-    assert_eq!("y".as_bytes(), response.body().as_ref());
+    assert_eq!("header", response.header());
+    assert_eq!("res body".as_bytes(), response.body().as_ref());
     Ok(())
 }
 
@@ -72,19 +73,12 @@ impl RequestHandler for Handler {
     type REQ = RawMessage;
     type RES = RawMessage;
     fn handle(&mut self, request: Self::REQ) -> HandlerResult<Self::RES> {
-        let req_header = request.header().clone();
-        Ok(RawMessage::new("x".into(), req_header, "y".into()))
+        Ok(RawMessage::new(request.endpoint().clone(), request.header().clone(), "res body".into()))
     }
 }
 ```
 
 ## Build
-
-### Update of README.md
-```shell
-cargo install cargo-readme
-cargo readme > README.md
-```
 
 ### Examples Subproject
 
@@ -100,9 +94,19 @@ RUST_LOG=DEBUG cargo run --example client
 
 Sample `tchannel-java` server (to check Rust client compatibility):
 ```shell
+# with local Maven/JDK
 mvn -f examples-jvm-server package exec:exec -Pserver
 # or with Docker
 docker-compose --project-directory examples-jvm-server up
+# or with Podman (no podman-compose because of network issues)
+podman build --file examples-jvm-server/Dockerfile
+podman run -p 8888:8888 localhost/examples-jvm-server_tchannel-jvm-server
+```
+
+### Update of README.md
+```shell
+cargo install cargo-readme
+cargo readme > README.md
 ```
 
 ---
