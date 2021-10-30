@@ -1,9 +1,19 @@
 [![build status](https://github.com/pwalski/tchannel_rs/actions/workflows/ci.yml/badge.svg)](https://github.com/pwalski/tchannel_rs/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE.md)
+[![crate](https://img.shields.io/crates/v/tchannel_rs.svg)](https://crates.io/crates/tchannel_rs)
+[![documentation](https://docs.rs/tchannel_rs/badge.svg)](https://docs.rs/tchannel_rs)
 
 # {{crate}}
 
 {{readme}}
+
+To run above example following dependencies are required:
+```toml
+tchannel_rs = *
+tokio =  { version = "^1", features = ["macros"] }
+env_logger = "^0" # log impl to print tchannel_rs logs
+```
+
 ## Build
 
 ### Examples Subproject

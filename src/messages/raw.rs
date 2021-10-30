@@ -7,7 +7,6 @@ use crate::subchannel::SubChannel;
 use bytes::{Buf, Bytes};
 use futures::Future;
 use std::collections::VecDeque;
-use std::convert::{TryFrom, TryInto};
 use std::fmt::{Display, Formatter};
 use std::net::ToSocketAddrs;
 use std::pin::Pin;

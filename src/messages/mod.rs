@@ -5,7 +5,6 @@ use crate::handler::HandlerResult;
 use crate::messages::args::MessageWithArgs;
 use bytes::Bytes;
 use futures::Future;
-use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
 use std::net::ToSocketAddrs;
 use std::pin::Pin;

@@ -4,6 +4,7 @@ pub mod payloads;
 use crate::errors::CodecError;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::Stream;
+use num_traits::FromPrimitive;
 use std::io::Cursor;
 use std::pin::Pin;
 use tokio_util::codec::{Decoder, Encoder};
@@ -110,7 +111,7 @@ impl Decoder for TFrameIdCodec {
             return Err(CodecError::Error("Frame too short".to_owned()));
         }
         let frame_type_bytes = src.get_u8();
-        let frame_type = match num::FromPrimitive::from_u8(frame_type_bytes) {
+        let frame_type = match FromPrimitive::from_u8(frame_type_bytes) {
             Some(frame_type) => frame_type,
             None => {
                 return Err(CodecError::Error(format!(

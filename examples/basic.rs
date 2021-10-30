@@ -1,9 +1,16 @@
+/**
+# Besides of `tchannel_rs` the example requires following dependencies:
+tokio =  { version = "^1", features = ["macros"] }
+env_logger = "^0" # to print logs
+*/
 use tchannel_rs::handler::{HandlerResult, RequestHandler};
 use tchannel_rs::messages::{MessageChannel, RawMessage};
 use tchannel_rs::{Config, TChannel, TResult};
 
 #[tokio::main]
 async fn main() -> TResult<()> {
+    // To see TChannel logs
+    env_logger::init();
     // Server
     let tserver = TChannel::new(Config::default())?;
     let subchannel = tserver.subchannel("service".to_string()).await?;

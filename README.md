@@ -1,5 +1,7 @@
 [![build status](https://github.com/pwalski/tchannel_rs/actions/workflows/ci.yml/badge.svg)](https://github.com/pwalski/tchannel_rs/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE.md)
+[![crate](https://img.shields.io/crates/v/tchannel_rs.svg)](https://crates.io/crates/tchannel_rs)
+[![documentation](https://docs.rs/tchannel_rs/badge.svg)](https://docs.rs/tchannel_rs)
 
 # tchannel_rs
 
@@ -32,12 +34,15 @@ Other TODOs:
  * [ ] Use Tower?
  * [ ] Implement Serde Serialize/Deserialize for Message types
 
-The goal of the project is to provide a similar API to Java TChannel implementation which is why both connection pools and server task handler are hidden from user.
+The goal of the project is to provide a similar API to Java TChannel implementation
+which is why both connection pools and server task handler are hidden from user.
 
 **Disclaimer**
 
-> It is an unofficial implementation of TChannel protocol. The project was used to learn Rust and it still has some missing features, so it will not go out of _alpha_ before implementing them and a proper testing.
-> The API may be a subject of change in consecutive `0.1.0-alpha.X` releases.
+> It is an unofficial implementation of TChannel protocol.
+> The project was used to learn Rust and it still has some missing features,
+> so it will not go out of `0.0.x` before implementing them and a proper testing.
+> Future [0.0.x releases may include API breaking changes](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#caret-requirements).
 
 ### Examples
 ```rust
@@ -76,6 +81,13 @@ impl RequestHandler for Handler {
         Ok(RawMessage::new(request.endpoint().clone(), request.header().clone(), "res body".into()))
     }
 }
+```
+
+To run above example following dependencies are required:
+```toml
+tchannel_rs = *
+tokio =  { version = "^1", features = ["macros"] }
+env_logger = "^0" # log impl to print tchannel_rs logs
 ```
 
 ## Build

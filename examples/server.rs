@@ -1,3 +1,9 @@
+/**
+# Besides of `tchannel_rs` the example requires following dependencies:
+tokio =  { version = "^1", features = ["macros"] }
+log = "^0"
+env_logger = "^0" # to print logs
+ */
 use log::{error, info};
 use std::ops::AddAssign;
 use std::time::Duration;

@@ -1,4 +1,3 @@
-use core::default::Default;
 use core::option::Option::Some;
 use core::time::Duration;
 use std::net::SocketAddr;

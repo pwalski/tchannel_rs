@@ -20,19 +20,23 @@
 //!
 //! Other TODOs:
 //!
-//!  * [ ] Proper tests (right now only few happy paths)
 //!  * [ ] Request response TTL
 //!  * [ ] Cancel request
 //!  * [ ] Claim requests
 //!  * [ ] Use Tower?
 //!  * [ ] Implement Serde Serialize/Deserialize for Message types
+//!  * [ ] Convert Thrift related Makefile to build.rs when implementing Thrift payloads
+//!  * [ ] Proper tests (right now only few happy paths)
 //!
-//! The goal of the project is to provide a similar API to Java TChannel implementation which is why both connection pools and server task handler are hidden from user.
+//! The goal of the project is to provide a similar API to Java TChannel implementation
+//! which is why both connection pools and server task handler are hidden from user.
 //!
 //! **Disclaimer**
 //!
-//! > It is an unofficial implementation of TChannel protocol. The project was used to learn Rust and it still has some missing features, so it will not go out of _alpha_ before implementing them and a proper testing.
-//! > The API may be a subject of change in consecutive `0.1.0-alpha.X` releases.
+//! > It is an unofficial implementation of TChannel protocol.
+//! > The project is used to learn Rust and it still has some missing features,
+//! > so it will not go out of `0.0.x` before implementing them and a proper testing.
+//! > Future [0.0.x releases may include API breaking changes](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#caret-requirements).
 //!
 //! ## Examples
 //! ```
@@ -72,23 +76,17 @@
 //!     }
 //! }
 //! ```
-//!
 
 #[macro_use]
 extern crate getset;
-
 #[macro_use]
 extern crate num_derive;
-
 #[macro_use]
 extern crate derive_builder;
-
 #[macro_use]
 extern crate derive_new;
-
 #[macro_use]
 extern crate bitflags;
-
 #[macro_use]
 extern crate log;
 

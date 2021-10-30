@@ -15,7 +15,6 @@ use log::debug;
 use std::array::IntoIter;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::iter::FromIterator;
 use std::sync::Arc;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::{TcpListener, TcpStream};

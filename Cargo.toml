@@ -1,7 +1,7 @@
 [package]
 name = "tchannel_rs"
-version = "0.1.0-alpha.2"
-edition = "2018"
+version = "0.0.1"
+edition = "2021"
 description = "Network multiplexing and framing RPC protocol"
 authors = ["pwalski <pwalski.dev@gmail.com>"]
 repository = "https://github.com/pwalski/tchannel-rust"
@@ -17,34 +17,34 @@ include = [
 ]
 
 [dependencies]
-getset = "0.1"
-derive_builder = "0.9"
-num-derive = "0.3"
-thrift = { version = "0.15", optional = true }
-tokio = { version = "1", features = ["rt-multi-thread", "net"] }
-tokio-util = { version = "0.6", features = ["codec"] }
-tokio-stream = { version = "0.1", features = ["tokio-util"] }
-bb8 = "0.7"
-bytes = "1.1"
-atoi = "0.4"
-num = "0.4"
-num-traits = "0.2"
-async-trait = "0.1"
-strum = "0.21"
-strum_macros = "0.21"
-thiserror = "1.0"
-bitflags = "1.3"
-futures = { version = "0.3", features = ["std"]}
-log = "0.4"
-derive-new = "0.5"
+getset = "^0.1"
+derive_builder = "~0.9"
+thrift = { version = "^0.15", optional = true }
+tokio = { version = "^1.13", features = ["rt-multi-thread", "net"] }
+tokio-util = { version = "^0.6", features = ["codec"] }
+tokio-stream = { version = "^0.1", features = ["tokio-util"] }
+tokio-macros = "^1.5"
+bb8 = "^0.7"
+bytes = "^1.1"
+atoi = "^0.4"
+num-derive = "^0.3"
+num-traits = "^0.2"
+async-trait = "^0.1"
+strum = "^0.22"
+strum_macros = "^0.22"
+thiserror = "^1.0"
+bitflags = "^1.3"
+futures = { version = "^0.3", features = ["std"]}
+log = "^0.4"
+derive-new = "^0.5"
 
 [dev-dependencies]
-tokio-test = "0.4.2"
-tokio = { version = "1.12.0", features = ["macros", "test-util"] }
-test-case = "1.2.0"
-serial_test = "0.5.1"
-env_logger = "0.9.0"
-anyhow = "1.0"
+tokio-test = "^0.4"
+tokio = { version = "^1.13", features = ["macros", "test-util"] }
+test-case = "^1.2"
+serial_test = "^0.5"
+env_logger = "^0.9"
+anyhow = "^1.0"
 
 [profile.dev]
 opt-level = 0

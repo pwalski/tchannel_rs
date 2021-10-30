@@ -267,7 +267,6 @@ mod tests {
     use crate::frames::{TFrame, TFrameId};
     use crate::messages::RawMessage;
     use std::collections::HashMap;
-    use std::convert::TryInto;
     use tokio_test::*;
 
     const SERVICE_NAME: &str = "test_service";

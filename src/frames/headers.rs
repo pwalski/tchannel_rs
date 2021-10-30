@@ -1,8 +1,8 @@
 use std::fmt::Debug;
+use strum_macros::Display;
 use strum_macros::EnumString;
-use strum_macros::ToString;
 
-#[derive(ToString, Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Display, PartialEq, Eq, Hash)]
 pub enum TransportHeaderKey {
     #[strum(serialize = "as")]
     ArgScheme,
@@ -29,7 +29,7 @@ pub enum TransportHeaderKey {
     ShardKey,
 }
 
-#[derive(ToString, Debug, EnumString, PartialEq, Eq)]
+#[derive(Debug, Display, EnumString, PartialEq, Eq)]
 pub enum ArgSchemeValue {
     #[strum(serialize = "raw")]
     Raw,
@@ -51,7 +51,7 @@ pub enum ArgSchemeValue {
     Custom(String),
 }
 
-#[derive(ToString, Debug, PartialEq, Eq)]
+#[derive(Debug, Display, PartialEq, Eq)]
 pub enum RetryFlagValue {
     #[allow(dead_code)]
     #[strum(serialize = "n")]
@@ -64,7 +64,7 @@ pub enum RetryFlagValue {
     RetryOnTimeout,
 }
 
-#[derive(ToString, Debug, EnumString, PartialEq, Eq)]
+#[derive(Debug, Display, EnumString, PartialEq, Eq)]
 pub enum InitHeaderKey {
     #[allow(dead_code)]
     #[strum(serialize = "host_port")]

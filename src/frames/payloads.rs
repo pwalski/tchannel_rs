@@ -4,7 +4,6 @@ use crate::messages::args::ResponseCode;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use num_traits::FromPrimitive;
 use std::collections::{HashMap, VecDeque};
-use std::convert::{TryFrom, TryInto};
 use std::fmt::Write;
 
 /// Supported TChannel protocol version

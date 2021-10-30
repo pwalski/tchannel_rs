@@ -2,7 +2,6 @@ use crate::errors::CodecError;
 use crate::frames::headers::ArgSchemeValue;
 use crate::messages::args::{MessageArgs, MessageWithArgs};
 use crate::messages::Message;
-use std::convert::{TryFrom, TryInto};
 
 #[derive(Default, Debug)]
 pub struct ThriftMessage {}
