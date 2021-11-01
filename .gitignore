@@ -8,3 +8,4 @@ tchannel/pkg
 target/
 src/gen
 out/
+/.vscode

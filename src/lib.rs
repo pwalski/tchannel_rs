@@ -4,34 +4,34 @@
 //!
 //! Features of TChannel protocol implemented so far:
 //!
-//!  * [x] A request/response model,
-//!  * [x] Multiplexing multiple requests across the same TCP socket,
-//!  * [x] Out-of-order responses,
-//!  * [ ] Streaming requests and responses,
-//!  * [ ] Checksums of frame args (only _None_),
-//!  * [ ] Transport of arbitrary payloads:
-//!     * [ ] Thrift
-//!     * [ ] SThrift (streaming Thrift)
-//!     * [ ] JSON
-//!     * [ ] HTTP
-//!     * [x] Raw
-//!  * [ ] Routing mesh
-//!  * [ ] Tracing
+//! * [x] A request/response model,
+//! * [x] Multiplexing multiple requests across the same TCP socket,
+//! * [x] Out-of-order responses,
+//! * [ ] Streaming requests and responses,
+//! * [ ] Checksums of frame args (only _None_),
+//! * [ ] Transport of arbitrary payloads:
+//!   * [ ] Thrift
+//!   * [ ] SThrift (streaming Thrift)
+//!   * [ ] JSON
+//!   * [ ] HTTP
+//!   * [x] Raw
+//! * [ ] Routing mesh
+//! * [ ] Tracing
 //!
 //! Other TODOs:
 //!
-//!  * [ ] Request response TTL
-//!  * [ ] Cancel request
-//!  * [ ] Claim requests
-//!  * [ ] Use Tower?
-//!  * [ ] Implement Serde Serialize/Deserialize for Message types
-//!  * [ ] Convert Thrift related Makefile to build.rs when implementing Thrift payloads
-//!  * [ ] Proper tests (right now only few happy paths)
+//! * [ ] Request response TTL
+//! * [ ] Cancel request
+//! * [ ] Claim requests
+//! * [ ] Use Tower?
+//! * [ ] Implement Serde Serialize/Deserialize for Message types
+//! * [ ] Convert Thrift related Makefile to build.rs when implementing Thrift payloads
+//! * [ ] Proper tests (right now only few happy paths)
 //!
 //! The goal of the project is to provide a similar API to Java TChannel implementation
 //! which is why both connection pools and server task handler are hidden from user.
 //!
-//! **Disclaimer**
+//! ### Disclaimer
 //!
 //! > It is an unofficial implementation of TChannel protocol.
 //! > The project is used to learn Rust and it still has some missing features,
@@ -39,6 +39,7 @@
 //! > Future [0.0.x releases may include API breaking changes](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#caret-requirements).
 //!
 //! ## Examples
+//!
 //! ```
 //! use tchannel_rs::{Config, TChannel, TResult};
 //! use tchannel_rs::handler::{HandlerResult, RequestHandler};
