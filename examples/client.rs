@@ -22,7 +22,7 @@ pub async fn main() -> Result<(), Error> {
 
 async fn run() -> Result<(), Error> {
     let tchannel = TChannel::new(Config::default())?;
-    let subchannel = tchannel.subchannel("server".to_owned()).await?;
+    let subchannel = tchannel.subchannel("server").await?;
     info!("Sending 3 requests");
     for _ in 0..3 {
         let request = RawMessage::new("pong".into(), "Marco".into(), "Ping!".into());

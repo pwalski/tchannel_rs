@@ -13,13 +13,13 @@ async fn main() -> TResult<()> {
     env_logger::init();
     // Server
     let tserver = TChannel::new(Config::default())?;
-    let subchannel = tserver.subchannel("service".to_string()).await?;
+    let subchannel = tserver.subchannel("service").await?;
     subchannel.register("endpoint", Handler {}).await?;
     tserver.start_server()?;
 
     // Client
     let tclient = TChannel::new(Config::default())?;
-    let subchannel = tclient.subchannel("service".to_string()).await?;
+    let subchannel = tclient.subchannel("service").await?;
     let request = RawMessage::new("endpoint".into(), "a".into(), "b".into());
     let response_res = subchannel.send(request, "127.0.0.1:8888").await;
 

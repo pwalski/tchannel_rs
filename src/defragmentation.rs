@@ -145,8 +145,7 @@ impl ArgSchemeChecker {
         if arg_scheme != self.arg_scheme {
             return Err(CodecError::Error(format!(
                 "Expected {} got {}",
-                self.arg_scheme.to_string(),
-                arg_scheme.to_string()
+                self.arg_scheme, arg_scheme
             )));
         }
         Ok(arg_scheme)
@@ -276,9 +275,8 @@ mod tests {
     fn single_frame() {
         // GIVEN
         let args: Vec<Option<Bytes>> = ["e", "h", "b"]
-            .to_vec()
-            .into_iter()
-            .map(|s| Some(Bytes::from(s)))
+            .iter()
+            .map(|s| Some(Bytes::from(*s)))
             .collect();
         let call_args = CallArgs::new(ChecksumType::None, None, VecDeque::from(args));
         let tracing = Tracing::new(0, 0, 0, TraceFlags::NONE);

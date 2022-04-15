@@ -294,13 +294,13 @@ mod tests {
         let frames_res = fragmenter.create_frames();
 
         // THEN
-        assert!(!frames_res.is_err(), "{}", frames_res.err().unwrap());
+        assert!(frames_res.is_ok(), "{}", frames_res.err().unwrap());
         let mut frames: Vec<TFrame> = block_on(frames_res.unwrap().collect());
         assert_eq!(frames.len(), 1);
         let mut frame = frames.pop().unwrap();
         assert_eq!(Type::CallRequest, *frame.frame_type());
         let call_req_res = CallRequest::decode(frame.payload_mut());
-        assert!(!call_req_res.is_err(), "{}", call_req_res.err().unwrap());
+        assert!(call_req_res.is_ok(), "{}", call_req_res.err().unwrap());
         let mut call_req = call_req_res.unwrap();
         assert_eq!(Flags::NONE, *call_req.flags());
         assert_eq!(SERVICE_NAME.to_string(), *call_req.fields().service());
@@ -337,7 +337,7 @@ mod tests {
         let frames_res = fragmenter.create_frames();
 
         // THEN
-        assert!(!frames_res.is_err(), "{}", frames_res.err().unwrap());
+        assert!(frames_res.is_ok(), "{}", frames_res.err().unwrap());
         let mut frames: Vec<TFrame> = block_on(frames_res.unwrap().collect());
         assert_eq!(frames.len(), 3);
         frames.reverse();

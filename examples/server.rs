@@ -26,7 +26,7 @@ pub async fn main() -> Result<(), Error> {
 
 async fn run() -> Result<(), Error> {
     let tchannel = TChannel::new(Config::default())?;
-    let subchannel = tchannel.subchannel("server".to_owned()).await?;
+    let subchannel = tchannel.subchannel("server").await?;
     subchannel.register("pong", PongHandler::default()).await?;
     tchannel.start_server()?;
     loop {

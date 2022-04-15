@@ -7,7 +7,7 @@ use crate::frames::payloads::Init;
 use crate::frames::payloads::{Codec, PROTOCOL_VERSION};
 use crate::frames::{TFrame, TFrameId, Type};
 use async_trait::async_trait;
-use bb8::{ErrorSink, Pool, PooledConnection, RunError};
+use bb8::{ErrorSink, Pool, RunError};
 use bytes::Bytes;
 use log::{debug, error};
 use std::collections::HashMap;
@@ -17,13 +17,12 @@ use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio::sync::RwLock;
 
-#[derive(Debug, Default, Builder)]
-#[builder(pattern = "owned")]
+#[derive(Debug, Default, new)]
 pub struct ConnectionPools {
     config: Arc<Config>,
-    #[builder(setter(skip))]
+    #[new(default)]
     pools: RwLock<HashMap<SocketAddr, Arc<Pool<ConnectionManager>>>>,
-    #[builder(setter(skip))]
+    #[new(default)]
     connection_pools_logger: ConnectionPoolsLogger,
 }
 
@@ -98,7 +97,7 @@ impl bb8::ManageConnection for ConnectionManager {
         verify(connection).await
     }
 
-    async fn is_valid(&self, conn: &mut PooledConnection<'_, Self>) -> Result<(), Self::Error> {
+    async fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
         debug!("Is valid?");
         ping(conn).await
     }
