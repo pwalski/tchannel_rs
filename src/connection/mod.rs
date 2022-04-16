@@ -65,7 +65,7 @@ impl FramesDispatcher {
         }
         std::mem::drop(senders);
         //TODO it will return error on check if it got concurrently inserted
-        Ok(self.dispatch_first(frame).map_ok(Some).await?)
+        self.dispatch_first(frame).map_ok(Some).await
     }
 
     pub async fn deregister(&self, id: &u32) -> Option<Sender<TFrameId>> {

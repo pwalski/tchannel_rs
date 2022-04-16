@@ -12,7 +12,6 @@ use crate::SubChannel;
 use futures::TryFutureExt;
 use futures::{self, SinkExt, StreamExt, TryStreamExt};
 use log::debug;
-use std::array::IntoIter;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -138,7 +137,7 @@ impl Server {
 
     async fn send_init_res(framed_write: &mut TFramedWrite, id: u32) -> ConnectionResult<()> {
         //TODO properly handle Init headers
-        let headers = HashMap::from_iter(IntoIter::new([(
+        let headers = HashMap::from_iter(IntoIterator::into_iter([(
             InitHeaderKey::TChannelLanguage.to_string(),
             "rust".to_string(),
         )]));

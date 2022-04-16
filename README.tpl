@@ -8,6 +8,7 @@
 {{readme}}
 
 To run above example following dependencies are required:
+
 ```toml
 tchannel_rs = *
 tokio =  { version = "^1", features = ["macros"] }
@@ -19,16 +20,19 @@ env_logger = "^0" # log impl to print tchannel_rs logs
 ### Examples Subproject
 
 Sample server:
+
 ```shell
 RUST_LOG=DEBUG cargo run --example server
 ```
 
 Sample client:
+
 ```shell
 RUST_LOG=DEBUG cargo run --example client
 ```
 
 Sample `tchannel-java` server (to check Rust client compatibility):
+
 ```shell
 # with local Maven/JDK
 mvn -f examples-jvm-server package exec:exec -Pserver
@@ -40,6 +44,7 @@ podman run -p 8888:8888 localhost/examples-jvm-server_tchannel-jvm-server
 ```
 
 ### Update of README.md
+
 ```shell
 cargo install cargo-readme
 cargo readme > README.md

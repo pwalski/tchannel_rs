@@ -11,40 +11,42 @@ TChannel is a network multiplexing and framing RPC protocol created by Uber ([pr
 
 Features of TChannel protocol implemented so far:
 
- * [x] A request/response model,
- * [x] Multiplexing multiple requests across the same TCP socket,
- * [x] Out-of-order responses,
- * [ ] Streaming requests and responses,
- * [ ] Checksums of frame args (only _None_),
- * [ ] Transport of arbitrary payloads:
-    * [ ] Thrift
-    * [ ] SThrift (streaming Thrift)
-    * [ ] JSON
-    * [ ] HTTP
-    * [x] Raw
- * [ ] Routing mesh
- * [ ] Tracing
+* [x] A request/response model,
+* [x] Multiplexing multiple requests across the same TCP socket,
+* [x] Out-of-order responses,
+* [ ] Streaming requests and responses,
+* [ ] Checksums of frame args (only _None_),
+* [ ] Transport of arbitrary payloads:
+  * [ ] Thrift
+  * [ ] SThrift (streaming Thrift)
+  * [ ] JSON
+  * [ ] HTTP
+  * [x] Raw
+* [ ] Routing mesh
+* [ ] Tracing
 
 Other TODOs:
 
- * [ ] Proper tests (right now only few happy paths)
- * [ ] Request response TTL
- * [ ] Cancel request
- * [ ] Claim requests
- * [ ] Use Tower?
- * [ ] Implement Serde Serialize/Deserialize for Message types
+* [ ] Request response TTL
+* [ ] Cancel request
+* [ ] Claim requests
+* [ ] Use Tower?
+* [ ] Implement Serde Serialize/Deserialize for Message types
+* [ ] Convert Thrift related Makefile to build.rs when implementing Thrift payloads
+* [ ] Proper tests (right now only few happy paths)
 
 The goal of the project is to provide a similar API to Java TChannel implementation
 which is why both connection pools and server task handler are hidden from user.
 
-**Disclaimer**
+#### Disclaimer
 
 > It is an unofficial implementation of TChannel protocol.
-> The project was used to learn Rust and it still has some missing features,
+> The project is used to learn Rust and it still has some missing features,
 > so it will not go out of `0.0.x` before implementing them and a proper testing.
 > Future [0.0.x releases may include API breaking changes](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#caret-requirements).
 
 ### Examples
+
 ```rust
 use tchannel_rs::{Config, TChannel, TResult};
 use tchannel_rs::handler::{HandlerResult, RequestHandler};
@@ -84,6 +86,7 @@ impl RequestHandler for Handler {
 ```
 
 To run above example following dependencies are required:
+
 ```toml
 tchannel_rs = *
 tokio =  { version = "^1", features = ["macros"] }
@@ -95,16 +98,19 @@ env_logger = "^0" # log impl to print tchannel_rs logs
 ### Examples Subproject
 
 Sample server:
+
 ```shell
 RUST_LOG=DEBUG cargo run --example server
 ```
 
 Sample client:
+
 ```shell
 RUST_LOG=DEBUG cargo run --example client
 ```
 
 Sample `tchannel-java` server (to check Rust client compatibility):
+
 ```shell
 # with local Maven/JDK
 mvn -f examples-jvm-server package exec:exec -Pserver
@@ -116,6 +122,7 @@ podman run -p 8888:8888 localhost/examples-jvm-server_tchannel-jvm-server
 ```
 
 ### Update of README.md
+
 ```shell
 cargo install cargo-readme
 cargo readme > README.md

@@ -55,7 +55,7 @@ impl SubChannel {
         host: ADDR,
     ) -> TResult<(FrameInput, FrameOutput)> {
         let host = first_addr(host)?;
-        Ok(self.connect(host).await?)
+        self.connect(host).await
     }
 
     pub(super) async fn send_internal<REQ: Message, RES: Message>(

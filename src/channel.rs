@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::connection::pool::{ConnectionPools, ConnectionPoolsBuilder};
+use crate::connection::pool::ConnectionPools;
 use crate::connection::ConnectionResult;
 use crate::errors::TChannelError;
 use crate::server::Server;
@@ -30,9 +30,7 @@ impl TChannel {
     /// Initializes TChannel.
     pub fn new(config: Config) -> TResult<Self> {
         let config = Arc::new(config);
-        let connection_pools = ConnectionPoolsBuilder::default()
-            .config(config.clone())
-            .build()?;
+        let connection_pools = ConnectionPools::new(config.clone());
         let subchannels = Arc::new(RwLock::new(HashMap::new()));
         Ok(TChannel {
             config,
