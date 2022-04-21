@@ -9,21 +9,21 @@ use std::fmt::Debug;
 use std::net::ToSocketAddrs;
 use std::pin::Pin;
 
+#[cfg(feature = "json")]
+mod json;
 mod raw;
 #[cfg(feature = "thrift")]
 mod thrift;
 
-pub use raw::RawMessage;
-pub use raw::RawMessageBuilder;
+#[cfg(feature = "json")]
+pub use json::{JsonMessage, JsonMessageBuilder};
+pub use raw::{RawMessage, RawMessageBuilder};
 #[cfg(feature = "thrift")]
 pub use thrift::ThriftMessage;
 
 pub trait Message: MessageWithArgs + Debug + Send {}
 
-pub trait MessageChannel {
-    type REQ: Message;
-    type RES: Message;
-
+pub trait MessageChannel<REQ: Message, RES: Message> {
     /// Sends `message` to `host` address.
     ///
     /// Error message response arrives as [`super::errors::HandlerError::MessageError`].
@@ -32,9 +32,9 @@ pub trait MessageChannel {
     /// * `host` - Address used to connect to host or find previously pooled connection.
     fn send<'a, ADDR: ToSocketAddrs + Send + 'a>(
         &'a self,
-        request: Self::REQ,
+        request: REQ,
         host: ADDR,
-    ) -> Pin<Box<dyn Future<Output = HandlerResult<Self::RES>> + Send + '_>>;
+    ) -> Pin<Box<dyn Future<Output = HandlerResult<RES>> + Send + '_>>;
 }
 
 pub(crate) mod args {

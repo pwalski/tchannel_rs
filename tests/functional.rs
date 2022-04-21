@@ -59,7 +59,9 @@ async fn echo_test(
 ) -> Result<(), anyhow::Error> {
     // GIVEN
     let _ = env_logger::builder().is_test(true).try_init();
-    let server = start_echo_server(service, endpoint).await?;
+    let server = start_echo_server(service, endpoint)
+        .await
+        .expect("Failed to start server");
     let req = RawMessage::new(
         endpoint.to_string(),
         header.to_string(),
@@ -67,8 +69,10 @@ async fn echo_test(
     );
 
     // WHEN
-    let res = make_request(service, req.clone()).await?;
-    server.shutdown_server()?;
+    let res = make_request(service, req.clone())
+        .await
+        .expect("Failed to make request");
+    server.shutdown_server().expect("Failed to shutdown server");
 
     // THEN
     assert_eq!(

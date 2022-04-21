@@ -10,7 +10,8 @@ import java.net.InetAddress;
 
 public final class SyncServer {
 
-    private SyncServer() {}
+    private SyncServer() {
+    }
 
     public static void main(String[] args) throws Exception {
         TChannel server = createServer();
@@ -21,11 +22,11 @@ public final class SyncServer {
 
     protected static TChannel createServer() throws Exception {
         TChannel tchannel = new TChannel.Builder("server")
-                .setServerHost(InetAddress.getByAddress(new byte[] {0,0,0,0}))
+                .setServerHost(InetAddress.getByAddress(new byte[] { 0, 0, 0, 0 }))
                 .setServerPort(8888)
                 .build();
         tchannel.makeSubChannel("server")
-                .register("pong", new MarcoPoloHandler());
+                .register("pong", new ExampleRawHandler());
         tchannel.listen().channel().closeFuture().sync();
         return tchannel;
     }
@@ -37,7 +38,7 @@ public final class SyncServer {
         return tchannel;
     }
 
-    static class MarcoPoloHandler extends RawRequestHandler {
+    static class ExampleRawHandler extends RawRequestHandler {
         private int count = 0;
 
         @Override
@@ -48,11 +49,11 @@ public final class SyncServer {
             count++;
             switch (count) {
                 case 1:
-                    return createResponse(request,ResponseCode.OK, "Polo","Pong!");
+                    return createResponse(request, ResponseCode.OK, "Polo", "Pong!");
                 case 2:
-                    return createResponse(request,ResponseCode.Error,"Polo","I feel bad ...");
+                    return createResponse(request, ResponseCode.Error, "Polo", "I feel bad ...");
                 default:
-                    return createResponse(request, ResponseCode.Error,"Polo","Not again!");
+                    return createResponse(request, ResponseCode.Error, "Polo", "Not again!");
             }
         }
 

@@ -130,6 +130,13 @@ impl From<String> for CodecError {
     }
 }
 
+#[cfg(feature = "json")]
+impl From<serde_json::Error> for CodecError {
+    fn from(err: serde_json::Error) -> Self {
+        CodecError::Error(err.to_string())
+    }
+}
+
 impl From<SendError<TFrameId>> for ConnectionError {
     fn from(err: SendError<TFrameId>) -> Self {
         ConnectionError::MessageErrorId(
