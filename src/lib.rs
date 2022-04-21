@@ -12,7 +12,7 @@
 //! * [ ] Transport of arbitrary payloads:
 //!   * [ ] Thrift
 //!   * [ ] SThrift (streaming Thrift)
-//!   * [ ] JSON
+//!   * [x] JSON
 //!   * [ ] HTTP
 //!   * [x] Raw
 //! * [ ] Routing mesh
@@ -27,6 +27,7 @@
 //! * [ ] Implement Serde Serialize/Deserialize for Message types
 //! * [ ] Convert Thrift related Makefile to build.rs when implementing Thrift payloads
 //! * [ ] Proper tests (right now only few happy paths)
+//! * [ ] Make request handlers generic (no associated types)
 //!
 //! The goal of the project is to provide a similar API to Java TChannel implementation
 //! which is why both connection pools and server task handler are hidden from user.
